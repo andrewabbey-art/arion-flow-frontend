@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabase } from "../../../lib/supabaseClient"
+import { getSupabaseClient } from "../../../lib/supabaseClient"
 
 function normalizeGpuType(input?: string): string {
   if (!input) return "NVIDIA GeForce RTX 4090"
@@ -16,6 +16,7 @@ function normalizeGpuType(input?: string): string {
 
 export async function POST(req: Request) {
   try {
+    const supabase = getSupabaseClient()
     const { userId, datacenter_id, storage_gb, gpu_type, name } = await req.json()
 
     // 1) Insert order
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
       .single()
     if (insertError) throw new Error("Supabase insert error: " + insertError.message)
 
-    // 2) Create volume (REST)
+    // 2) Create network volume
     const createVolBody = { name, size: storage_gb, dataCenterId: datacenter_id }
     const volResp = await fetch("https://rest.runpod.io/v1/networkvolumes", {
       method: "POST",
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
     const volumeId = volJson?.id
     if (!volumeId) throw new Error("No volumeId in response: " + JSON.stringify(volJson))
 
-    // 3) Deploy Pod (GraphQL)
+    // 3) Deploy pod
     const finalGpuTypeId = normalizeGpuType(gpu_type)
     const query = `
       mutation podFindAndDeployOnDemand($input: PodFindAndDeployOnDemandInput) {
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
 
     const workspaceUrl = `https://${podId}.runpod.net`
 
-    // 4) Update order
+    // 4) Update Supabase
     const { error: updateError } = await supabase
       .from("orders")
       .update({
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
       .eq("id", order.id)
     if (updateError) throw new Error("Supabase update error: " + updateError.message)
 
-    // 5) Return result
+    // 5) Return response
     return NextResponse.json({
       ok: true,
       orderId: order.id,
