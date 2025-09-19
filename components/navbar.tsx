@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image"; // Import the Next.js Image component
 import { usePathname } from "next/navigation";
-import Image from 'next/image';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -14,37 +14,45 @@ export default function Navbar() {
   ];
 
   return (
-    // CHANGE 1: Removed "border-b" so the line is no longer on the whole nav bar
-    <nav className="bg-secondary/80 backdrop-blur-md sticky top-0 z-50">
-      {/* CHANGE 2: Removed "container" and "mx-auto" to allow content to go to the edge.
-        CHANGE 3: Added "border-b" here to place the line directly under this div.
-        CHANGE 4: Added padding "px-4 lg:px-8" for spacing on different screen sizes.
-      */}
-      <div className="mx-auto px-4 lg:px-3 py-1 flex justify-between items-center border-b border-border">
-        {/* Logo / Brand */}
-        <Link href="/" className="text-2xl font-bold font-heading text-foreground flex items-center gap-3">
-            <Image src="/arion-wave-icon.svg" alt="Arion Flow wave icon" width={150} height={150} />
-            Arion Flow
+    <nav className="bg-background border-b border-border fixed top-0 left-0 right-0 z-50">
+      <div className="container mx-auto px-1 py-1 flex justify-between items-center">
+        {/* Logo / Brand with Icon */}
+        <Link href="/" className="flex items-center gap-2 text-xl font-bold text-primary">
+          <Image 
+            src="/arion-wave-icon.svg" 
+            alt="Arion Flow icon" 
+            width={80} 
+            height={80} 
+          />
+          <span>Arion Flow</span>
         </Link>
 
-        {/* Links */}
-        <div className="flex space-x-8 items-center">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`text-sm transition-colors ${
-                pathname === link.href
-                  ? "text-primary font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <a href="/contact" className="hidden sm:block px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-            Book a Demo
-          </a>
+        {/* Right side navigation */}
+        <div className="flex items-center space-x-8">
+          {/* Page Links */}
+          <div className="hidden md:flex space-x-6">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`text-sm transition-colors ${
+                  pathname === link.href
+                    ? "text-primary font-semibold"
+                    : "text-muted-foreground hover:text-primary"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Auth Link */}
+          <Link
+            href="/auth"
+            className="text-primary text-sm font-semibold hover:opacity-80 transition-opacity"
+          >
+            Login / Sign Up
+          </Link>
         </div>
       </div>
     </nav>
