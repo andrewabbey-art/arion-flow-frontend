@@ -1,26 +1,44 @@
+/* Import the core Tailwind styles */
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Define the entire design system using the new @theme directive for Tailwind v4.
+  This is the new single source of truth for your design tokens.
+*/
+@theme {
+  /* Colors - Optimized for a Dark Theme */
+  --color-background: #0D1B26; /* Deep dark blue-gray */
+  --color-foreground: #E0E7EB; /* Light off-white for text */
+  --color-muted-foreground: #A6B4BC; /* Mid-tone gray for secondary text */
+  
+  --color-card: #1C2D3A; /* Slightly lighter dark background for cards */
+  --color-border: #2D4452; /* Darker border for subtlety */
+
+  --color-primary: #379CA0; /* Slightly desaturated primary teal for dark theme */
+  --color-primary-foreground: #FFFFFF; /* White text on primary */
+  
+  --color-secondary: #081218; /* Even darker for footer/navbar background */
+  --color-secondary-foreground: #FFFFFF; /* White text on secondary */
+  
+  --color-accent: #62E8E9; /* Bright accent remains the same */
+  --color-accent-foreground: #0D1B26; /* Dark text on accent */
+
+  /* Border Radius */
+  --radius: 0.75rem;
+
+  /* Font Families */
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-poppins);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base body and heading styles */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: theme(colors.background);
+  color: theme(colors.foreground);
+  font-family: theme(fontFamily.sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: theme(fontFamily.heading);
+  color: theme(colors.foreground);
+  font-weight: 600;
 }

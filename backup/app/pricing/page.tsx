@@ -27,7 +27,7 @@ export default function PricingPage() {
             >
               <h3 className={`text-xl font-semibold font-heading ${tier.featured && 'text-white'}`}>{tier.name}</h3>
               <p className={`text-sm mt-1 flex-grow ${tier.featured ? 'text-gray-300' : 'text-muted-foreground'}`}>{tier.desc}</p>
-              <p className={`text-3xl font-bold mt-6 ${tier.featured && 'text-white'}`}>{tier.price}</p>
+              <p className={`text-4xl font-bold mt-6 ${tier.featured && 'text-white'}`}>{tier.price}</p>
               <p className={tier.featured ? 'text-gray-400' : 'text-muted-foreground'}>{tier.gpu}</p>
               <button className={`mt-8 w-full px-4 py-3 rounded-lg font-medium transition-colors ${
                 tier.featured ? 'bg-accent text-accent-foreground hover:bg-accent/90' : 'bg-primary text-primary-foreground hover:bg-primary/90'

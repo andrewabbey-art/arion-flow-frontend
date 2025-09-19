@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from 'next/image';
+import Image from 'next/image'; // Import Image component
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -14,16 +14,12 @@ export default function Navbar() {
   ];
 
   return (
-    // CHANGE 1: Removed "border-b" so the line is no longer on the whole nav bar
-    <nav className="bg-secondary/80 backdrop-blur-md sticky top-0 z-50">
-      {/* CHANGE 2: Removed "container" and "mx-auto" to allow content to go to the edge.
-        CHANGE 3: Added "border-b" here to place the line directly under this div.
-        CHANGE 4: Added padding "px-4 lg:px-8" for spacing on different screen sizes.
-      */}
-      <div className="mx-auto px-4 lg:px-3 py-1 flex justify-between items-center border-b border-border">
+    <nav className="bg-card/80 backdrop-blur-md border-b sticky top-0 z-50">
+      <div className="container mx-auto px-6 py-4 flex justify-between items-center">
         {/* Logo / Brand */}
-        <Link href="/" className="text-2xl font-bold font-heading text-foreground flex items-center gap-3">
-            <Image src="/arion-wave-icon.svg" alt="Arion Flow wave icon" width={150} height={150} />
+        <Link href="/" className="text-xl font-bold font-heading text-primary flex items-center gap-2">
+            {/* You can replace this with your actual SVG logo component if you have one */}
+            <Image src="/dolphin-logo.svg" alt="Arion Flow Logo" width={28} height={28} />
             Arion Flow
         </Link>
 
@@ -36,7 +32,7 @@ export default function Navbar() {
               className={`text-sm transition-colors ${
                 pathname === link.href
                   ? "text-primary font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-primary"
               }`}
             >
               {link.label}

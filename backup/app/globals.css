@@ -1,0 +1,44 @@
+/* Import the core Tailwind styles */
+@import "tailwindcss";
+
+/* Define the entire design system using the new @theme directive for Tailwind v4.
+  This is the new single source of truth for your design tokens.
+*/
+@theme {
+  /* Colors */
+  --color-background: #F7FAFA;
+  --color-foreground: #1C3B45;
+  --color-muted-foreground: #5C6F75;
+  
+  --color-card: #FFFFFF;
+  --color-border: #DDE6E8;
+
+  --color-primary: #3AA1A2;
+  --color-primary-foreground: #FFFFFF;
+  
+  --color-secondary: #0F2D37;
+  --color-secondary-foreground: #FFFFFF;
+  
+  --color-accent: #62E8E9;
+  --color-accent-foreground: #0F2D37;
+
+  /* Border Radius */
+  --radius: 0.75rem;
+
+  /* Font Families */
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-poppins);
+}
+
+/* Base body and heading styles */
+body {
+  background-color: theme(colors.background);
+  color: theme(colors.foreground);
+  font-family: theme(fontFamily.sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: theme(fontFamily.heading);
+  color: theme(colors.foreground);
+  font-weight: 600;
+}
