@@ -19,7 +19,9 @@ export async function POST(req: Request) {
     const supabase = getSupabaseClient()
     const { userId, datacenter_id, storage_gb, gpu_type, name } = await req.json()
 
+    //
     // 1) Insert order
+    //
     const { data: order, error: insertError } = await supabase
       .from("orders")
       .insert({
@@ -34,7 +36,9 @@ export async function POST(req: Request) {
       .single()
     if (insertError) throw new Error("Supabase insert error: " + insertError.message)
 
-    // 2) Create network volume
+    //
+    // 2) Create network volume (REST)
+    //
     const createVolBody = { name, size: storage_gb, dataCenterId: datacenter_id }
     const volResp = await fetch("https://rest.runpod.io/v1/networkvolumes", {
       method: "POST",
@@ -54,7 +58,9 @@ export async function POST(req: Request) {
     const volumeId = volJson?.id
     if (!volumeId) throw new Error("No volumeId in response: " + JSON.stringify(volJson))
 
-    // 3) Deploy pod
+    //
+    // 3) Deploy pod (GraphQL)
+    //
     const finalGpuTypeId = normalizeGpuType(gpu_type)
     const query = `
       mutation podFindAndDeployOnDemand($input: PodFindAndDeployOnDemandInput) {
@@ -64,6 +70,7 @@ export async function POST(req: Request) {
         }
       }
     `
+
     const variables = {
       input: {
         cloudType: "ALL",
@@ -71,6 +78,7 @@ export async function POST(req: Request) {
         gpuTypeId: finalGpuTypeId,
         name,
         imageName: "ghcr.io/andrewabbey-art/arion_flow:0.3",
+        registryAuthId: process.env.RUNPOD_REGISTRY_AUTH_ID, // ✅ auth for GHCR
         ports: "8888/http,22/tcp",
         networkVolumeId: volumeId,
         volumeMountPath: "/workspace",
@@ -97,7 +105,9 @@ export async function POST(req: Request) {
 
     const workspaceUrl = `https://${podId}.runpod.net`
 
+    //
     // 4) Update Supabase
+    //
     const { error: updateError } = await supabase
       .from("orders")
       .update({
@@ -109,7 +119,9 @@ export async function POST(req: Request) {
       .eq("id", order.id)
     if (updateError) throw new Error("Supabase update error: " + updateError.message)
 
+    //
     // 5) Return response
+    //
     return NextResponse.json({
       ok: true,
       orderId: order.id,
