@@ -143,8 +143,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen w-full p-4 sm:p-6 lg:p-8 pt-16 sm:pt-20">
-      <div className="container mx-auto">
+    // CHANGE 1: Increased top padding (pt-24) to push content below the sticky navbar.
+    // CHANGE 2: Removed other padding classes (p-4, etc.) for clarity.
+    <main className="min-h-screen w-full pt-24">
+      {/* CHANGE 3: Added padding here to control content spacing. */}
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-10">
           <h1 className="text-4xl font-bold font-heading">Dashboard</h1>
           <p className="text-muted-foreground mt-2">{status}</p>
