@@ -5,11 +5,27 @@ import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
 
+type GpuMetric = {
+  id: string
+  gpu_util_percent: number
+  memory_util_percent: number
+}
+
+type ContainerMetrics = {
+  cpu_percent: number | null
+  memory_percent: number | null
+}
+
 type Telemetry = {
-  runtime_status: string
+  pod_id: string
+  name: string
+  image: string
+  desired_status: string
+  gpu_count: number
   uptime_seconds: number
-  gpu_type: string
-  volume_size_gb: number
+  gpu_metrics: GpuMetric[]
+  container_metrics: ContainerMetrics
+  ports: any[]
   workspace_url: string
 }
 
@@ -48,7 +64,6 @@ export default function DashboardPage() {
         return
       }
 
-      // Store orders
       setOrders(data)
       setStatus(`Found ${data.length} order(s).`)
     }
@@ -123,10 +138,26 @@ export default function DashboardPage() {
 
             {order.telemetry ? (
               <div className="text-left space-y-2">
-                <p><strong>Status:</strong> {order.telemetry.runtime_status}</p>
-                <p><strong>GPU:</strong> {order.telemetry.gpu_type}</p>
-                <p><strong>Disk:</strong> {order.telemetry.volume_size_gb} GB</p>
+                <p><strong>Pod:</strong> {order.telemetry.name}</p>
+                <p><strong>Image:</strong> {order.telemetry.image}</p>
+                <p><strong>Status:</strong> {order.telemetry.desired_status}</p>
+                <p><strong>GPU Count:</strong> {order.telemetry.gpu_count}</p>
                 <p><strong>Uptime:</strong> {formatUptime(order.telemetry.uptime_seconds)}</p>
+
+                {order.telemetry.gpu_metrics.map((g, i) => (
+                  <div key={i} className="ml-4">
+                    <p><strong>GPU {i + 1}:</strong></p>
+                    <p>‣ Utilization: {g.gpu_util_percent}%</p>
+                    <p>‣ Memory Utilization: {g.memory_util_percent}%</p>
+                  </div>
+                ))}
+
+                {order.telemetry.container_metrics && (
+                  <div>
+                    <p><strong>CPU:</strong> {order.telemetry.container_metrics.cpu_percent ?? "N/A"}%</p>
+                    <p><strong>RAM:</strong> {order.telemetry.container_metrics.memory_percent ?? "N/A"}%</p>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Loading telemetry…</p>
