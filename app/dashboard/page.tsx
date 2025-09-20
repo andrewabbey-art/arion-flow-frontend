@@ -10,19 +10,25 @@ type Telemetry = {
   uptime_seconds: number
   gpu_type: string
   volume_size_gb: number
+  workspace_url: string
+}
+
+type Order = {
+  id: string
+  status: string
+  workspace_url: string | null
+  telemetry?: Telemetry
 }
 
 export default function DashboardPage() {
   const router = useRouter()
   const supabase = getSupabaseClient()
 
-  const [status, setStatus] = useState("Loading your status...")
-  const [workspaceUrl, setWorkspaceUrl] = useState<string | null>(null)
-  const [telemetry, setTelemetry] = useState<Telemetry | null>(null)
-  const [orderId, setOrderId] = useState<string | null>(null)
+  const [orders, setOrders] = useState<Order[]>([])
+  const [status, setStatus] = useState("Loading your orders...")
 
   useEffect(() => {
-    async function loadUserOrder() {
+    async function loadUserOrders() {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
@@ -30,53 +36,62 @@ export default function DashboardPage() {
         return
       }
 
-      // Get latest order for this user
+      // Get all orders for this user
       const { data, error } = await supabase
         .from("orders")
         .select("id, status, workspace_url")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .single()
 
-      if (error || !data) {
-        setStatus("No order found. Please create one.")
+      if (error || !data || data.length === 0) {
+        setStatus("No orders found. Please create one.")
         return
       }
 
-      setOrderId(data.id)
-      setWorkspaceUrl(data.workspace_url)
-      setStatus(`Current status: ${data.status}`)
+      // Store orders
+      setOrders(data)
+      setStatus(`Found ${data.length} order(s).`)
     }
 
-    loadUserOrder()
+    loadUserOrders()
   }, [router, supabase])
 
+  // Poll telemetry for each order
   useEffect(() => {
-    if (!orderId) return
+    if (orders.length === 0) return
 
-    // Poll telemetry every 15s
-    const fetchTelemetry = async () => {
+    const fetchTelemetry = async (orderId: string) => {
       try {
         const res = await fetch(`/api/orders/${orderId}/telemetry`)
         const json = await res.json()
         if (json.ok) {
-          setTelemetry(json.telemetry)
-          setStatus(`Workspace status: ${json.telemetry.runtime_status}`)
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url }
+                : o
+            )
+          )
         } else {
-          setStatus("Error fetching telemetry: " + json.error)
+          console.error("Telemetry error for order", orderId, json.error)
         }
       } catch (err) {
-        setStatus("Telemetry request failed")
+        console.error("Telemetry request failed", err)
       }
     }
 
-    fetchTelemetry()
-    const interval = setInterval(fetchTelemetry, 15000)
-    return () => clearInterval(interval)
-  }, [orderId])
+    // Kick off telemetry immediately
+    orders.forEach((o) => fetchTelemetry(o.id))
 
-  // Format uptime
+    // Then poll every 15s
+    const interval = setInterval(() => {
+      orders.forEach((o) => fetchTelemetry(o.id))
+    }, 15000)
+
+    return () => clearInterval(interval)
+  }, [orders])
+
+  // Format uptime nicely
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
     const hrs = Math.floor(mins / 60)
@@ -85,31 +100,40 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background/50 p-4 pt-20">
-      <Card className="p-8 w-full max-w-2xl text-center">
-        <h2 className="text-3xl font-bold mb-4 text-primary">Dashboard</h2>
-        <p className="text-muted-foreground mb-6">{status}</p>
+    <div className="min-h-screen flex flex-col items-center bg-background/50 p-4 pt-20">
+      <h2 className="text-3xl font-bold mb-6 text-primary">Dashboard</h2>
+      <p className="text-muted-foreground mb-8">{status}</p>
 
-        {workspaceUrl && (
-          <a
-            href={workspaceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block bg-accent text-primary font-bold px-6 py-3 rounded-[var(--radius)] hover:opacity-90 transition-opacity mb-6"
-          >
-            Go to Your Workspace
-          </a>
-        )}
+      <div className="grid gap-6 w-full max-w-5xl">
+        {orders.map((order) => (
+          <Card key={order.id} className="p-6">
+            <h3 className="text-xl font-semibold mb-2">Order #{order.id}</h3>
+            <p className="text-sm mb-4">Status: {order.status}</p>
 
-        {telemetry && (
-          <div className="text-left space-y-2">
-            <p><strong>Status:</strong> {telemetry.runtime_status}</p>
-            <p><strong>GPU:</strong> {telemetry.gpu_type}</p>
-            <p><strong>Disk:</strong> {telemetry.volume_size_gb} GB</p>
-            <p><strong>Uptime:</strong> {formatUptime(telemetry.uptime_seconds)}</p>
-          </div>
-        )}
-      </Card>
+            {order.workspace_url && (
+              <a
+                href={order.workspace_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block bg-accent text-primary font-bold px-4 py-2 rounded-[var(--radius)] hover:opacity-90 transition-opacity mb-4"
+              >
+                Go to Workspace
+              </a>
+            )}
+
+            {order.telemetry ? (
+              <div className="text-left space-y-2">
+                <p><strong>Status:</strong> {order.telemetry.runtime_status}</p>
+                <p><strong>GPU:</strong> {order.telemetry.gpu_type}</p>
+                <p><strong>Disk:</strong> {order.telemetry.volume_size_gb} GB</p>
+                <p><strong>Uptime:</strong> {formatUptime(order.telemetry.uptime_seconds)}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading telemetry…</p>
+            )}
+          </Card>
+        ))}
+      </div>
     </div>
   )
 }
