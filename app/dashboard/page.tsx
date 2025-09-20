@@ -4,9 +4,9 @@ import { useEffect, useState } from "react"
 import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
-import Metric from "@/components/Metric"
+import Metric from "@/components/Metric" 
 
-// --- Type definitions remain unchanged ---
+// --- All your type definitions and functional code remain unchanged ---
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -50,7 +50,6 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [status, setStatus] = useState("Loading your orders...")
 
-  // --- Original data fetching logic is restored ---
   useEffect(() => {
     async function loadUserOrders() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -144,7 +143,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen w-full p-4 sm:p-6 lg:p-8">
+    <main className="min-h-screen w-full p-4 sm:p-6 lg:p-8 pt-16 sm:pt-20">
       <div className="container mx-auto">
         <div className="mb-10">
           <h1 className="text-4xl font-bold font-heading">Dashboard</h1>
@@ -156,7 +155,7 @@ export default function DashboardPage() {
             <Card key={order.id} className="p-0 overflow-hidden">
               <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card/50 border-b border-border">
                 <div>
-                  <h3 className="text-xl font-bold font-heading">Workspace #{order.id.slice(0, 8)}...</h3>
+                  <h3 className="text-xl font-bold font-heading">Workspace ID #{order.id}</h3>
                   <div className="flex items-center gap-2 mt-2 text-sm">
                     <span className={`h-2 w-2 rounded-full ${order.telemetry?.desired_status === 'RUNNING' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
                     <span className="text-muted-foreground">
