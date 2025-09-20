@@ -4,8 +4,8 @@ import { getSupabaseClient } from "../../../../../lib/supabaseClient"
 const RUNPOD_GRAPHQL_ENDPOINT = "https://api.runpod.io/graphql"
 
 const TERMINATE_MUTATION = `
-  mutation TerminatePod($podId: String!) {
-    terminatePod(input: { podId: $podId }) {
+  mutation podTerminate($input: PodTerminateInput!) {
+    podTerminate(input: $input) {
       id
       desiredStatus
     }
@@ -38,15 +38,21 @@ export async function POST(
         "content-type": "application/json",
         Authorization: `Bearer ${RUNPOD_API_KEY}`,
       },
-      body: JSON.stringify({ query: TERMINATE_MUTATION, variables: { podId: order.pod_id } }),
+      body: JSON.stringify({
+        query: TERMINATE_MUTATION,
+        variables: { input: { podId: order.pod_id } },
+      }),
     })
 
     const gqlJson = await gqlResp.json()
     if (!gqlResp.ok || gqlJson.errors) {
-      return NextResponse.json({ ok: false, error: "Failed to terminate pod" }, { status: 502 })
+      const errMsg =
+        gqlJson?.errors?.map((e: { message: string }) => e.message).join("; ") ||
+        `GraphQL error (status ${gqlResp.status})`
+      return NextResponse.json({ ok: false, error: errMsg }, { status: 502 })
     }
 
-    return NextResponse.json({ ok: true, result: gqlJson.data.terminatePod })
+    return NextResponse.json({ ok: true, result: gqlJson.data.podTerminate })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json({ ok: false, error: message }, { status: 500 })

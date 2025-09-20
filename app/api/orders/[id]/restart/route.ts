@@ -3,9 +3,9 @@ import { getSupabaseClient } from "../../../../../lib/supabaseClient"
 
 const RUNPOD_GRAPHQL_ENDPOINT = "https://api.runpod.io/graphql"
 
-const RESTART_MUTATION = `
-  mutation RestartPod($podId: String!) {
-    restartPod(input: { podId: $podId }) {
+const RESUME_MUTATION = `
+  mutation podResume($input: PodResumeInput!) {
+    podResume(input: $input) {
       id
       desiredStatus
     }
@@ -38,15 +38,21 @@ export async function POST(
         "content-type": "application/json",
         Authorization: `Bearer ${RUNPOD_API_KEY}`,
       },
-      body: JSON.stringify({ query: RESTART_MUTATION, variables: { podId: order.pod_id } }),
+      body: JSON.stringify({
+        query: RESUME_MUTATION,
+        variables: { input: { podId: order.pod_id } },
+      }),
     })
 
     const gqlJson = await gqlResp.json()
     if (!gqlResp.ok || gqlJson.errors) {
-      return NextResponse.json({ ok: false, error: "Failed to restart pod" }, { status: 502 })
+      const errMsg =
+        gqlJson?.errors?.map((e: { message: string }) => e.message).join("; ") ||
+        `GraphQL error (status ${gqlResp.status})`
+      return NextResponse.json({ ok: false, error: errMsg }, { status: 502 })
     }
 
-    return NextResponse.json({ ok: true, result: gqlJson.data.restartPod })
+    return NextResponse.json({ ok: true, result: gqlJson.data.podResume })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
