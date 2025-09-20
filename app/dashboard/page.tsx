@@ -5,7 +5,6 @@ import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
 
-// Types
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -27,10 +26,9 @@ type Port = {
 
 type Telemetry = {
   pod_id: string
-  name: string
-  image: string
   desired_status: string
   gpu_count: number
+  gpu_type: string
   uptime_seconds: number
   gpu_metrics: GpuMetric[]
   container_metrics: ContainerMetrics
@@ -117,6 +115,17 @@ export default function DashboardPage() {
     return `${mins}m`
   }
 
+  const handleAction = async (orderId: string, action: "stop" | "restart" | "terminate") => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/${action}`, { method: "POST" })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || "Unknown error")
+      alert(`Instance ${action} command sent successfully.`)
+    } catch (err) {
+      alert(`Failed to ${action} instance: ${(err as Error).message}`)
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-background/50 p-4 pt-20">
       <h2 className="text-3xl font-bold mb-6 text-primary">Dashboard</h2>
@@ -124,47 +133,69 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 w-full max-w-5xl">
         {orders.map((order) => (
-          <Card key={order.id} className="p-6">
-            <h3 className="text-xl font-semibold mb-2">Order #{order.id}</h3>
-            <p className="text-sm mb-4">Status: {order.status}</p>
+          <Card key={order.id} className="p-6 flex flex-col justify-between">
+            <div>
+              <h3 className="text-xl font-semibold mb-2">Order #{order.id}</h3>
+              <p className="text-sm mb-4">Status: {order.status}</p>
 
-            {order.workspace_url && (
-              <a
-                href={order.workspace_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block bg-accent text-primary font-bold px-4 py-2 rounded-[var(--radius)] hover:opacity-90 transition-opacity mb-4"
+              {order.telemetry ? (
+                <div className="text-left space-y-2">
+                  <p><strong>Status:</strong> {order.telemetry.desired_status}</p>
+                  <p><strong>GPU Count:</strong> {order.telemetry.gpu_count}</p>
+                  <p><strong>GPU Type:</strong> {order.telemetry.gpu_type}</p>
+                  <p><strong>Uptime:</strong> {formatUptime(order.telemetry.uptime_seconds)}</p>
+
+                  {order.telemetry.gpu_metrics.map((g, i) => (
+                    <div key={i} className="ml-4">
+                      <p><strong>GPU {i + 1}:</strong></p>
+                      <p>‣ Utilization: {g.gpu_util_percent}%</p>
+                      <p>‣ Memory Utilization: {g.memory_util_percent}%</p>
+                    </div>
+                  ))}
+
+                  {order.telemetry.container_metrics && (
+                    <div>
+                      <p><strong>CPU:</strong> {order.telemetry.container_metrics.cpu_percent ?? "N/A"}%</p>
+                      <p><strong>RAM:</strong> {order.telemetry.container_metrics.memory_percent ?? "N/A"}%</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Loading telemetry…</p>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2">
+              {order.workspace_url && (
+                <a
+                  href={order.workspace_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block bg-accent text-primary font-bold px-4 py-2 rounded-[var(--radius)] hover:opacity-90 transition-opacity"
+                >
+                  Go to Workspace
+                </a>
+              )}
+
+              <button
+                onClick={() => handleAction(order.id, "stop")}
+                className="bg-yellow-500 text-white font-bold px-4 py-2 rounded hover:opacity-90 transition-opacity"
               >
-                Go to Workspace
-              </a>
-            )}
-
-            {order.telemetry ? (
-              <div className="text-left space-y-2">
-                <p><strong>Pod:</strong> {order.telemetry.name}</p>
-                <p><strong>Image:</strong> {order.telemetry.image}</p>
-                <p><strong>Status:</strong> {order.telemetry.desired_status}</p>
-                <p><strong>GPU Count:</strong> {order.telemetry.gpu_count}</p>
-                <p><strong>Uptime:</strong> {formatUptime(order.telemetry.uptime_seconds)}</p>
-
-                {order.telemetry.gpu_metrics.map((g, i) => (
-                  <div key={i} className="ml-4">
-                    <p><strong>GPU {i + 1}:</strong></p>
-                    <p>‣ Utilization: {g.gpu_util_percent}%</p>
-                    <p>‣ Memory Utilization: {g.memory_util_percent}%</p>
-                  </div>
-                ))}
-
-                {order.telemetry.container_metrics && (
-                  <div>
-                    <p><strong>CPU:</strong> {order.telemetry.container_metrics.cpu_percent ?? "N/A"}%</p>
-                    <p><strong>RAM:</strong> {order.telemetry.container_metrics.memory_percent ?? "N/A"}%</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Loading telemetry…</p>
-            )}
+                Stop Instance
+              </button>
+              <button
+                onClick={() => handleAction(order.id, "restart")}
+                className="bg-blue-500 text-white font-bold px-4 py-2 rounded hover:opacity-90 transition-opacity"
+              >
+                Restart Instance
+              </button>
+              <button
+                onClick={() => handleAction(order.id, "terminate")}
+                className="bg-red-600 text-white font-bold px-4 py-2 rounded hover:opacity-90 transition-opacity"
+              >
+                Terminate Instance
+              </button>
+            </div>
           </Card>
         ))}
       </div>

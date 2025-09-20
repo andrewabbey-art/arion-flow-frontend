@@ -11,6 +11,9 @@ const POD_QUERY = `
       gpuCount
       imageName
       desiredStatus
+      machine {
+        gpuName
+      }
       runtime {
         uptimeInSeconds
         gpus {
@@ -34,7 +37,6 @@ const POD_QUERY = `
   }
 `
 
-// Strong types for GraphQL fields
 type RunpodGpu = {
   id: string
   gpuUtilPercent: number
@@ -60,6 +62,7 @@ type RunpodPod = {
   imageName: string
   desiredStatus: string
   gpuCount: number
+  machine?: { gpuName: string }
   runtime: {
     uptimeInSeconds: number
     gpus: RunpodGpu[]
@@ -81,7 +84,6 @@ export async function GET(
       throw new Error("Missing RUNPOD_API_KEY env var.")
     }
 
-    // Lookup order
     const { data: order, error } = await supabase
       .from("orders")
       .select("id, pod_id, volume_id")
@@ -95,7 +97,6 @@ export async function GET(
       )
     }
 
-    // GraphQL query
     const gqlResp = await fetch(RUNPOD_GRAPHQL_ENDPOINT, {
       method: "POST",
       headers: {
@@ -126,31 +127,31 @@ export async function GET(
 
     const telemetry = {
       pod_id: pod.id,
-      name: pod.name,
-      image: pod.imageName,
       desired_status: pod.desiredStatus,
       gpu_count: pod.gpuCount,
+      gpu_type: pod.machine?.gpuName ?? "Unknown",
       uptime_seconds: pod.runtime?.uptimeInSeconds ?? 0,
-      gpu_metrics: pod.runtime?.gpus.map((g) => ({
-        id: g.id,
-        gpu_util_percent: g.gpuUtilPercent,
-        memory_util_percent: g.memoryUtilPercent,
-      })) ?? [],
+      gpu_metrics:
+        pod.runtime?.gpus.map((g) => ({
+          id: g.id,
+          gpu_util_percent: g.gpuUtilPercent,
+          memory_util_percent: g.memoryUtilPercent,
+        })) ?? [],
       container_metrics: {
         cpu_percent: pod.runtime?.container?.cpuPercent ?? null,
         memory_percent: pod.runtime?.container?.memoryPercent ?? null,
       },
-      ports: pod.runtime?.ports.map((p) => ({
-        ip: p.ip,
-        is_ip_public: p.isIpPublic,
-        private_port: p.privatePort,
-        public_port: p.publicPort,
-        type: p.type,
-      })) ?? [],
+      ports:
+        pod.runtime?.ports.map((p) => ({
+          ip: p.ip,
+          is_ip_public: p.isIpPublic,
+          private_port: p.privatePort,
+          public_port: p.publicPort,
+          type: p.type,
+        })) ?? [],
       workspace_url: `https://${order.pod_id}-8080.proxy.runpod.net/`,
     }
 
-    // Persist latest status + uptime to DB
     await supabase
       .from("orders")
       .update({
