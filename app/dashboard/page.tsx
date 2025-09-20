@@ -28,7 +28,8 @@ type Telemetry = {
   pod_id: string
   desired_status: string
   gpu_count: number
-  gpu_type: string
+  gpu_type: string        // resolved display name
+  gpu_type_id?: string    // raw type ID
   uptime_seconds: number
   gpu_metrics: GpuMetric[]
   container_metrics: ContainerMetrics
@@ -51,11 +52,10 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [status, setStatus] = useState("Loading your orders...")
 
-  // Load orders for user
+  // Load user orders
   useEffect(() => {
     async function loadUserOrders() {
       const { data: { user } } = await supabase.auth.getUser()
-
       if (!user) {
         router.push("/auth")
         return
@@ -79,7 +79,7 @@ export default function DashboardPage() {
     loadUserOrders()
   }, [router, supabase])
 
-  // Poll telemetry every 15s
+  // Poll telemetry
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -91,7 +91,12 @@ export default function DashboardPage() {
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url, error: undefined }
+                ? {
+                    ...o,
+                    telemetry: json.telemetry,
+                    workspace_url: json.telemetry.workspace_url,
+                    error: undefined,
+                  }
                 : o
             )
           )
@@ -104,10 +109,12 @@ export default function DashboardPage() {
             )
           )
         }
-      } catch (err) {
+      } catch {
         setOrders((prev) =>
           prev.map((o) =>
-            o.id === orderId ? { ...o, error: "Telemetry request failed", telemetry: undefined } : o
+            o.id === orderId
+              ? { ...o, error: "Telemetry request failed", telemetry: undefined }
+              : o
           )
         )
       }
@@ -121,7 +128,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [orders])
 
-  // Format uptime nicely
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
     const hrs = Math.floor(mins / 60)
@@ -129,7 +135,6 @@ export default function DashboardPage() {
     return `${mins}m`
   }
 
-  // Pod lifecycle actions
   const handleAction = async (orderId: string, action: "stop" | "restart" | "terminate") => {
     try {
       const res = await fetch(`/api/orders/${orderId}/${action}`, { method: "POST" })
@@ -169,6 +174,9 @@ export default function DashboardPage() {
                 <div className="text-left space-y-2">
                   <p><strong>GPU Count:</strong> {order.telemetry.gpu_count}</p>
                   <p><strong>GPU Type:</strong> {order.telemetry.gpu_type}</p>
+                  {order.telemetry.gpu_type_id && (
+                    <p><strong>GPU Type ID:</strong> {order.telemetry.gpu_type_id}</p>
+                  )}
                   <p><strong>Uptime:</strong> {formatUptime(order.telemetry.uptime_seconds)}</p>
 
                   {order.telemetry.gpu_metrics.map((g, i) => (

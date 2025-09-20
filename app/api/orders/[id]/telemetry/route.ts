@@ -10,7 +10,12 @@ const POD_QUERY = `
       gpuCount
       desiredStatus
       machine {
-        gpuType
+        gpuTypeId
+        gpuDisplayName
+        gpuType {
+          id
+          displayName
+        }
       }
       runtime {
         uptimeInSeconds
@@ -35,7 +40,7 @@ const POD_QUERY = `
   }
 `
 
-// Strong types for schema objects
+// Strong types
 type RunpodGpu = {
   id: string
   gpuUtilPercent: number
@@ -59,7 +64,11 @@ type RunpodPod = {
   id: string
   gpuCount: number
   desiredStatus: string
-  machine?: { gpuType: string }
+  machine?: {
+    gpuTypeId?: string
+    gpuDisplayName?: string
+    gpuType?: { id: string; displayName: string }
+  }
   runtime?: {
     uptimeInSeconds?: number
     gpus?: RunpodGpu[]
@@ -68,7 +77,6 @@ type RunpodPod = {
   }
 }
 
-// Utility to enforce timeout
 function withTimeout<T>(p: Promise<T>, ms: number) {
   return Promise.race([
     p,
@@ -89,7 +97,6 @@ export async function GET(
     const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY
     if (!RUNPOD_API_KEY) throw new Error("Missing RUNPOD_API_KEY env var.")
 
-    // Look up order
     const { data: order, error } = await supabase
       .from("orders")
       .select("id, pod_id, volume_id")
@@ -103,7 +110,6 @@ export async function GET(
       )
     }
 
-    // Call RunPod GraphQL
     const gqlResp = await withTimeout(
       fetch(RUNPOD_GRAPHQL_ENDPOINT, {
         method: "POST",
@@ -136,12 +142,18 @@ export async function GET(
       )
     }
 
-    // Build telemetry response
+    // Resolve GPU type string with fallbacks
+    const gpuType =
+      pod.machine?.gpuType?.displayName ??
+      pod.machine?.gpuDisplayName ??
+      pod.machine?.gpuTypeId ??
+      "Unknown"
+
     const telemetry = {
       pod_id: pod.id,
       desired_status: pod.desiredStatus,
       gpu_count: pod.gpuCount,
-      gpu_type: pod.machine?.gpuType ?? "Unknown",
+      gpu_type: gpuType,
       uptime_seconds: pod.runtime?.uptimeInSeconds ?? 0,
       gpu_metrics: (pod.runtime?.gpus ?? []).map((g: RunpodGpu) => ({
         id: g.id,
@@ -162,7 +174,6 @@ export async function GET(
       workspace_url: `https://${order.pod_id}-8080.proxy.runpod.net/`,
     }
 
-    // Persist status back to Supabase
     await supabase
       .from("orders")
       .update({
