@@ -5,6 +5,7 @@ import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
 
+// Types
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -16,6 +17,14 @@ type ContainerMetrics = {
   memory_percent: number | null
 }
 
+type Port = {
+  ip: string
+  is_ip_public: boolean
+  private_port: number
+  public_port: number
+  type: string
+}
+
 type Telemetry = {
   pod_id: string
   name: string
@@ -25,7 +34,7 @@ type Telemetry = {
   uptime_seconds: number
   gpu_metrics: GpuMetric[]
   container_metrics: ContainerMetrics
-  ports: any[]
+  ports: Port[]
   workspace_url: string
 }
 
@@ -52,7 +61,6 @@ export default function DashboardPage() {
         return
       }
 
-      // Get all orders for this user
       const { data, error } = await supabase
         .from("orders")
         .select("id, status, workspace_url")
@@ -71,7 +79,6 @@ export default function DashboardPage() {
     loadUserOrders()
   }, [router, supabase])
 
-  // Poll telemetry for each order
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -95,10 +102,7 @@ export default function DashboardPage() {
       }
     }
 
-    // Kick off telemetry immediately
     orders.forEach((o) => fetchTelemetry(o.id))
-
-    // Then poll every 15s
     const interval = setInterval(() => {
       orders.forEach((o) => fetchTelemetry(o.id))
     }, 15000)
@@ -106,7 +110,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [orders])
 
-  // Format uptime nicely
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
     const hrs = Math.floor(mins / 60)
