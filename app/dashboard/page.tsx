@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 // import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
-import Metric from "@/components/Metric"// Import the new component
+import Metric from "@/components/Metric" // Import the new component
 
 // --- All your type definitions and functional code remain unchanged ---
 type GpuMetric = {
