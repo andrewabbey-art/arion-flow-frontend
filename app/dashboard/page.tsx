@@ -4,9 +4,10 @@ import { useEffect, useState } from "react"
 import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
-import Metric from "@/components/Metric" 
+import Metric from "@/components/Metric"
+import Link from "next/link" 
 
-// --- All your type definitions and functional code remain unchanged ---
+// --- Type definitions remain unchanged ---
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -50,6 +51,7 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [status, setStatus] = useState("Loading your orders...")
 
+  // --- All your data fetching and handler logic remains here ---
   useEffect(() => {
     async function loadUserOrders() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -65,12 +67,12 @@ export default function DashboardPage() {
         .order("created_at", { ascending: false })
 
       if (error || !data || data.length === 0) {
-        setStatus("No orders found. Please create one.")
+        setStatus("No active workspaces found.")
         return
       }
 
       setOrders(data)
-      setStatus(`Found ${data.length} order(s).`)
+      setStatus(`Displaying ${data.length} active workspace(s).`)
     }
 
     loadUserOrders()
@@ -143,14 +145,21 @@ export default function DashboardPage() {
   }
 
   return (
-    // CHANGE 1: Increased top padding (pt-24) to push content below the sticky navbar.
-    // CHANGE 2: Removed other padding classes (p-4, etc.) for clarity.
     <main className="min-h-screen w-full pt-24">
-      {/* CHANGE 3: Added padding here to control content spacing. */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-10">
-          <h1 className="text-4xl font-bold font-heading">Dashboard</h1>
-          <p className="text-muted-foreground mt-2">{status}</p>
+        <div className="mb-10 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h1 className="text-4xl font-bold font-heading">Dashboard</h1>
+                <p className="text-muted-foreground mt-2">{status}</p>
+            </div>
+            {/* --- LINK UPDATED --- */}
+            <Link 
+                href="/order" 
+                className="mt-4 sm:mt-0 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+                + Create New Instance
+            </Link>
+            {/* --- END LINK UPDATE --- */}
         </div>
 
         <div className="grid gap-8 w-full">
