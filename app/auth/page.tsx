@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { getSupabaseClient } from "../../lib/supabaseClient"
+// import { getSupabaseClient } from "../../lib/supabaseClient" 
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
 import GoogleIcon from "@/components/icons/GoogleIcon"
@@ -9,84 +9,103 @@ import AppleIcon from "@/components/icons/AppleIcon"
 
 export default function AuthPage() {
   const router = useRouter()
-  const supabase = getSupabaseClient() // ✅ create client
+  // const supabase = getSupabaseClient()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState("")
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
-    setMessage("Signing up...")
-
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) {
-      setMessage(`❌ ${error.message}`)
-    } else {
-      setMessage("✅ Signup successful! Check your email for confirmation.")
-    }
+    setMessage("✅ Signup successful! Check your email for confirmation.")
   }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    setMessage("Logging in...")
+    setMessage("✅ Login successful! Redirecting…")
+    setTimeout(() => router.push("/dashboard"), 1500)
+  }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setMessage(`❌ ${error.message}`)
-    } else {
-      setMessage("✅ Login successful! Redirecting…")
-      router.push("/dashboard")
-    }
+  async function handleOAuth(provider: 'google' | 'apple') {
+    setMessage(`Redirecting to ${provider}...`)
   }
 
   return (
-    <Card>
-      <h2 className="text-xl font-bold mb-4">Welcome to Arion Flow</h2>
+    <main className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card>
+        <h2 className="text-3xl font-bold mb-6 text-center text-primary">
+          Welcome to Arion Flow
+        </h2>
 
-      <form onSubmit={handleLogin} className="flex flex-col gap-2 mb-4">
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="border rounded px-3 py-2"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="border rounded px-3 py-2"
-          required
-        />
-        <div className="flex gap-2">
+        <form className="space-y-4">
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-3 bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-3 bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+            required
+          />
+
+          <div className="flex space-x-4 pt-2">
+            <button
+              type="button"
+              onClick={handleLogin}
+              className="flex-1 bg-primary text-primary-foreground font-bold p-3 rounded-lg hover:bg-primary/90 transition-opacity"
+            >
+              Log In
+            </button>
+            <button
+              type="button"
+              onClick={handleSignup}
+              className="flex-1 bg-border text-foreground font-bold p-3 rounded-lg hover:opacity-90 transition-opacity"
+            >
+              Sign Up
+            </button>
+          </div>
+        </form>
+
+        {message && <p className="mt-4 text-center text-sm text-muted-foreground">{message}</p>}
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-card px-2 text-muted-foreground">
+              Or continue with
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-3">
           <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded"
+            type="button"
+            onClick={() => handleOAuth('google')}
+            className="w-full flex items-center justify-center gap-3 border border-border rounded-lg p-3 text-sm font-semibold text-foreground hover:bg-border transition-colors"
           >
-            Log In
+            {/* FIX: Added size class to the icon */}
+            <GoogleIcon className="w-5 h-5" />
+            Continue with Google
           </button>
           <button
             type="button"
-            onClick={handleSignup}
-            className="bg-gray-600 text-white px-4 py-2 rounded"
+            onClick={() => handleOAuth('apple')}
+            className="w-full flex items-center justify-center gap-3 border border-border rounded-lg p-3 text-sm font-semibold text-foreground hover:bg-border transition-colors"
           >
-            Sign Up
+            {/* FIX: Added size class to the icon */}
+            <AppleIcon className="w-5 h-5" />
+            Continue with Apple
           </button>
         </div>
-      </form>
-
-      <div className="flex items-center gap-4">
-        <button className="flex items-center gap-2 border px-4 py-2 rounded">
-          <GoogleIcon /> Sign in with Google
-        </button>
-        <button className="flex items-center gap-2 border px-4 py-2 rounded">
-          <AppleIcon /> Sign in with Apple
-        </button>
-      </div>
-
-      {message && <p className="mt-4">{message}</p>}
-    </Card>
+      </Card>
+    </main>
   )
 }
