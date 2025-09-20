@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSupabaseClient } from "../../../../../../lib/supabaseClient"
+import { getSupabaseClient } from "../../../../../lib/supabaseClient"
 
 const RUNPOD_GRAPHQL_ENDPOINT = "https://api.runpod.io/graphql"
 
