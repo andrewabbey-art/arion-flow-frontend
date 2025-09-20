@@ -3,16 +3,26 @@
 import { useEffect, useState } from "react"
 import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
-import Card from "@/components/card" // Using the Card component for consistency
+import Card from "@/components/card"
+
+type Telemetry = {
+  runtime_status: string
+  uptime_seconds: number
+  gpu_type: string
+  volume_size_gb: number
+}
 
 export default function DashboardPage() {
   const router = useRouter()
-  const supabase = getSupabaseClient() // ✅ use new client getter
+  const supabase = getSupabaseClient()
+
   const [status, setStatus] = useState("Loading your status...")
   const [workspaceUrl, setWorkspaceUrl] = useState<string | null>(null)
+  const [telemetry, setTelemetry] = useState<Telemetry | null>(null)
+  const [orderId, setOrderId] = useState<string | null>(null)
 
   useEffect(() => {
-    async function checkStatus() {
+    async function loadUserOrder() {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
@@ -20,50 +30,59 @@ export default function DashboardPage() {
         return
       }
 
+      // Get latest order for this user
       const { data, error } = await supabase
-        .from("users")
-        .select("status, workspace_url")
-        .eq("id", user.id)
+        .from("orders")
+        .select("id, status, workspace_url")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .single()
 
-      if (error) {
-        setStatus("Error: Could not retrieve your user status.")
+      if (error || !data) {
+        setStatus("No order found. Please create one.")
         return
       }
 
-      if (!data) {
-        setStatus("No user record found. Please contact support.")
-        return
-      }
+      setOrderId(data.id)
+      setWorkspaceUrl(data.workspace_url)
+      setStatus(`Current status: ${data.status}`)
+    }
 
-      // Update status based on the data from Supabase
-      switch (data.status) {
-        case "pending":
-          setStatus("Your account is pending approval. Please wait for admin review.")
-          break
-        case "denied":
-          setStatus("Sorry, your signup was not approved.")
-          break
-        case "approved":
-          setStatus("Approved! Your workspace is being provisioned. Please check back soon.")
-          break
-        case "active":
-          if (data.workspace_url) {
-            setStatus("Your workspace is ready!")
-            setWorkspaceUrl(data.workspace_url)
-            // 🚫 removed router.push(data.workspace_url) to avoid blank screen
-          } else {
-            setStatus("Your account is active but the workspace URL is missing. Please contact support.")
-          }
-          break
-        default:
-          setStatus("Unknown account status. Please contact support.")
-          break
+    loadUserOrder()
+  }, [router, supabase])
+
+  useEffect(() => {
+    if (!orderId) return
+
+    // Poll telemetry every 15s
+    const fetchTelemetry = async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/telemetry`)
+        const json = await res.json()
+        if (json.ok) {
+          setTelemetry(json.telemetry)
+          setStatus(`Workspace status: ${json.telemetry.runtime_status}`)
+        } else {
+          setStatus("Error fetching telemetry: " + json.error)
+        }
+      } catch (err) {
+        setStatus("Telemetry request failed")
       }
     }
 
-    checkStatus()
-  }, [router, supabase])
+    fetchTelemetry()
+    const interval = setInterval(fetchTelemetry, 15000)
+    return () => clearInterval(interval)
+  }, [orderId])
+
+  // Format uptime
+  const formatUptime = (secs: number) => {
+    const mins = Math.floor(secs / 60)
+    const hrs = Math.floor(mins / 60)
+    if (hrs > 0) return `${hrs}h ${mins % 60}m`
+    return `${mins}m`
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background/50 p-4 pt-20">
@@ -76,10 +95,19 @@ export default function DashboardPage() {
             href={workspaceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block bg-accent text-primary font-bold px-6 py-3 rounded-[var(--radius)] hover:opacity-90 transition-opacity"
+            className="inline-block bg-accent text-primary font-bold px-6 py-3 rounded-[var(--radius)] hover:opacity-90 transition-opacity mb-6"
           >
             Go to Your Workspace
           </a>
+        )}
+
+        {telemetry && (
+          <div className="text-left space-y-2">
+            <p><strong>Status:</strong> {telemetry.runtime_status}</p>
+            <p><strong>GPU:</strong> {telemetry.gpu_type}</p>
+            <p><strong>Disk:</strong> {telemetry.volume_size_gb} GB</p>
+            <p><strong>Uptime:</strong> {formatUptime(telemetry.uptime_seconds)}</p>
+          </div>
         )}
       </Card>
     </div>
