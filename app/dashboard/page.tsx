@@ -51,6 +51,7 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [status, setStatus] = useState("Loading your orders...")
 
+  // Load orders for user
   useEffect(() => {
     async function loadUserOrders() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -78,6 +79,7 @@ export default function DashboardPage() {
     loadUserOrders()
   }, [router, supabase])
 
+  // Poll telemetry every 15s
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -96,14 +98,16 @@ export default function DashboardPage() {
         } else {
           setOrders((prev) =>
             prev.map((o) =>
-              o.id === orderId ? { ...o, error: json.error ?? "Unknown telemetry error" } : o
+              o.id === orderId
+                ? { ...o, error: json.error ?? "Unknown telemetry error", telemetry: undefined }
+                : o
             )
           )
         }
       } catch (err) {
         setOrders((prev) =>
           prev.map((o) =>
-            o.id === orderId ? { ...o, error: "Telemetry request failed" } : o
+            o.id === orderId ? { ...o, error: "Telemetry request failed", telemetry: undefined } : o
           )
         )
       }
@@ -117,6 +121,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [orders])
 
+  // Format uptime nicely
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
     const hrs = Math.floor(mins / 60)
@@ -124,6 +129,7 @@ export default function DashboardPage() {
     return `${mins}m`
   }
 
+  // Pod lifecycle actions
   const handleAction = async (orderId: string, action: "stop" | "restart" | "terminate") => {
     try {
       const res = await fetch(`/api/orders/${orderId}/${action}`, { method: "POST" })
