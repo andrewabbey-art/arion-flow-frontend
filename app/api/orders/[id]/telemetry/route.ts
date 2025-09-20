@@ -7,9 +7,7 @@ const POD_QUERY = `
   query Pod($podId: String!) {
     pod(input: { podId: $podId }) {
       id
-      name
       gpuCount
-      imageName
       desiredStatus
       machine {
         gpuName
@@ -37,38 +35,13 @@ const POD_QUERY = `
   }
 `
 
-type RunpodGpu = {
-  id: string
-  gpuUtilPercent: number
-  memoryUtilPercent: number
-}
-
-type RunpodContainer = {
-  cpuPercent: number | null
-  memoryPercent: number | null
-}
-
-type RunpodPort = {
-  ip: string
-  isIpPublic: boolean
-  privatePort: number
-  publicPort: number
-  type: string
-}
-
-type RunpodPod = {
-  id: string
-  name: string
-  imageName: string
-  desiredStatus: string
-  gpuCount: number
-  machine?: { gpuName: string }
-  runtime: {
-    uptimeInSeconds: number
-    gpus: RunpodGpu[]
-    container: RunpodContainer
-    ports: RunpodPort[]
-  }
+function withTimeout<T>(p: Promise<T>, ms: number) {
+  return Promise.race([
+    p,
+    new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error(`Request timed out after ${ms} ms`)), ms)
+    ),
+  ])
 }
 
 export async function GET(
@@ -80,9 +53,7 @@ export async function GET(
     const supabase = getSupabaseClient()
 
     const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY
-    if (!RUNPOD_API_KEY) {
-      throw new Error("Missing RUNPOD_API_KEY env var.")
-    }
+    if (!RUNPOD_API_KEY) throw new Error("Missing RUNPOD_API_KEY env var.")
 
     const { data: order, error } = await supabase
       .from("orders")
@@ -97,27 +68,31 @@ export async function GET(
       )
     }
 
-    const gqlResp = await fetch(RUNPOD_GRAPHQL_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${RUNPOD_API_KEY}`,
-      },
-      body: JSON.stringify({
-        query: POD_QUERY,
-        variables: { podId: order.pod_id },
+    const gqlResp = await withTimeout(
+      fetch(RUNPOD_GRAPHQL_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${RUNPOD_API_KEY}`,
+        },
+        body: JSON.stringify({
+          query: POD_QUERY,
+          variables: { podId: order.pod_id },
+        }),
       }),
-    })
+      15000
+    )
 
-    const gqlJson = await gqlResp.json()
+    const gqlJson = await gqlResp.json().catch(() => ({}))
     if (!gqlResp.ok || gqlJson.errors) {
       const errMsg =
         gqlJson?.errors?.map((e: { message: string }) => e.message).join("; ") ||
         `GraphQL error (status ${gqlResp.status})`
+      console.error("GraphQL telemetry error:", errMsg, "resp:", JSON.stringify(gqlJson))
       return NextResponse.json({ ok: false, error: errMsg }, { status: 502 })
     }
 
-    const pod: RunpodPod | null = gqlJson?.data?.pod
+    const pod = gqlJson?.data?.pod
     if (!pod) {
       return NextResponse.json(
         { ok: false, error: "Pod not found" },
@@ -132,7 +107,7 @@ export async function GET(
       gpu_type: pod.machine?.gpuName ?? "Unknown",
       uptime_seconds: pod.runtime?.uptimeInSeconds ?? 0,
       gpu_metrics:
-        pod.runtime?.gpus.map((g) => ({
+        pod.runtime?.gpus?.map((g: any) => ({
           id: g.id,
           gpu_util_percent: g.gpuUtilPercent,
           memory_util_percent: g.memoryUtilPercent,
@@ -142,7 +117,7 @@ export async function GET(
         memory_percent: pod.runtime?.container?.memoryPercent ?? null,
       },
       ports:
-        pod.runtime?.ports.map((p) => ({
+        pod.runtime?.ports?.map((p: any) => ({
           ip: p.ip,
           is_ip_public: p.isIpPublic,
           private_port: p.privatePort,

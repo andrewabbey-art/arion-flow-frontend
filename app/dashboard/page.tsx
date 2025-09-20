@@ -41,6 +41,7 @@ type Order = {
   status: string
   workspace_url: string | null
   telemetry?: Telemetry
+  error?: string
 }
 
 export default function DashboardPage() {
@@ -88,15 +89,23 @@ export default function DashboardPage() {
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url }
+                ? { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url, error: undefined }
                 : o
             )
           )
         } else {
-          console.error("Telemetry error for order", orderId, json.error)
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId ? { ...o, error: json.error ?? "Unknown telemetry error" } : o
+            )
+          )
         }
       } catch (err) {
-        console.error("Telemetry request failed", err)
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId ? { ...o, error: "Telemetry request failed" } : o
+          )
+        )
       }
     }
 
@@ -136,11 +145,22 @@ export default function DashboardPage() {
           <Card key={order.id} className="p-6 flex flex-col justify-between">
             <div>
               <h3 className="text-xl font-semibold mb-2">Order #{order.id}</h3>
-              <p className="text-sm mb-4">Status: {order.status}</p>
+              <p className="text-sm mb-4">
+                Status: {order.telemetry?.desired_status ?? order.status}
+              </p>
 
-              {order.telemetry ? (
+              {order.error && (
+                <p className="text-red-500 text-sm mb-4">
+                  Telemetry error: {order.error}
+                </p>
+              )}
+
+              {!order.error && !order.telemetry && (
+                <p className="text-sm text-muted-foreground">Loading telemetry…</p>
+              )}
+
+              {order.telemetry && (
                 <div className="text-left space-y-2">
-                  <p><strong>Status:</strong> {order.telemetry.desired_status}</p>
                   <p><strong>GPU Count:</strong> {order.telemetry.gpu_count}</p>
                   <p><strong>GPU Type:</strong> {order.telemetry.gpu_type}</p>
                   <p><strong>Uptime:</strong> {formatUptime(order.telemetry.uptime_seconds)}</p>
@@ -160,8 +180,6 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Loading telemetry…</p>
               )}
             </div>
 
