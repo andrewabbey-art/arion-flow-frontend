@@ -1,31 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "../../../../../lib/supabaseClient"
 
-type PodStatusResponse = {
-  id: string
-  desiredStatus: string
-  gpuTypeId?: string
-  runtime?: { uptimeInSeconds?: number }
-}
-
-type VolumeResponse = {
-  id: string
-  size: number
-}
-
 export async function GET(
   _req: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = context.params
+    const { id } = await context.params   // ✅ await the promise
+
     const supabase = getSupabaseClient()
     const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY
-    if (!RUNPOD_API_KEY) {
-      throw new Error("Missing RUNPOD_API_KEY env var.")
-    }
+    if (!RUNPOD_API_KEY) throw new Error("Missing RUNPOD_API_KEY env var.")
 
-    // 1) Lookup order
+    // Lookup order
     const { data: order, error } = await supabase
       .from("orders")
       .select("id, pod_id, volume_id")
@@ -33,25 +20,20 @@ export async function GET(
       .single()
 
     if (error || !order) {
-      return NextResponse.json(
-        { ok: false, error: "Order not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 })
     }
 
-    // 2) Fetch pod info
-    const podResp = await fetch(
-      `https://rest.runpod.io/v1/pods/${order.pod_id}`,
-      { headers: { Authorization: `Bearer ${RUNPOD_API_KEY}` } }
-    )
-    const podJson = (await podResp.json()) as PodStatusResponse
+    // Fetch pod
+    const podResp = await fetch(`https://rest.runpod.io/v1/pods/${order.pod_id}`, {
+      headers: { Authorization: `Bearer ${RUNPOD_API_KEY}` },
+    })
+    const podJson = await podResp.json()
 
-    // 3) Fetch volume info
-    const volResp = await fetch(
-      `https://rest.runpod.io/v1/networkvolumes/${order.volume_id}`,
-      { headers: { Authorization: `Bearer ${RUNPOD_API_KEY}` } }
-    )
-    const volJson = (await volResp.json()) as VolumeResponse
+    // Fetch volume
+    const volResp = await fetch(`https://rest.runpod.io/v1/networkvolumes/${order.volume_id}`, {
+      headers: { Authorization: `Bearer ${RUNPOD_API_KEY}` },
+    })
+    const volJson = await volResp.json()
 
     const telemetry = {
       runtime_status: podJson.desiredStatus || "unknown",
@@ -60,7 +42,7 @@ export async function GET(
       volume_size_gb: volJson.size || 0,
     }
 
-    // 4) Update Supabase with latest telemetry
+    // Update Supabase
     await supabase
       .from("orders")
       .update({
@@ -73,8 +55,7 @@ export async function GET(
 
     return NextResponse.json({ ok: true, telemetry })
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Unknown error occurred"
+    const message = err instanceof Error ? err.message : "Unknown error"
     console.error("Telemetry error:", message)
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
