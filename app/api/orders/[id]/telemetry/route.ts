@@ -35,6 +35,39 @@ const POD_QUERY = `
   }
 `
 
+// Strong types instead of `any`
+type RunpodGpu = {
+  id: string
+  gpuUtilPercent: number
+  memoryUtilPercent: number
+}
+
+type RunpodPort = {
+  ip: string
+  isIpPublic: boolean
+  privatePort: number
+  publicPort: number
+  type: string
+}
+
+type RunpodContainer = {
+  cpuPercent: number | null
+  memoryPercent: number | null
+}
+
+type RunpodPod = {
+  id: string
+  gpuCount: number
+  desiredStatus: string
+  machine?: { gpuName: string }
+  runtime?: {
+    uptimeInSeconds?: number
+    gpus?: RunpodGpu[]
+    container?: RunpodContainer
+    ports?: RunpodPort[]
+  }
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number) {
   return Promise.race([
     p,
@@ -92,7 +125,7 @@ export async function GET(
       return NextResponse.json({ ok: false, error: errMsg }, { status: 502 })
     }
 
-    const pod = gqlJson?.data?.pod
+    const pod: RunpodPod | null = gqlJson?.data?.pod
     if (!pod) {
       return NextResponse.json(
         { ok: false, error: "Pod not found" },
@@ -106,24 +139,22 @@ export async function GET(
       gpu_count: pod.gpuCount,
       gpu_type: pod.machine?.gpuName ?? "Unknown",
       uptime_seconds: pod.runtime?.uptimeInSeconds ?? 0,
-      gpu_metrics:
-        pod.runtime?.gpus?.map((g: any) => ({
-          id: g.id,
-          gpu_util_percent: g.gpuUtilPercent,
-          memory_util_percent: g.memoryUtilPercent,
-        })) ?? [],
+      gpu_metrics: (pod.runtime?.gpus ?? []).map((g: RunpodGpu) => ({
+        id: g.id,
+        gpu_util_percent: g.gpuUtilPercent,
+        memory_util_percent: g.memoryUtilPercent,
+      })),
       container_metrics: {
         cpu_percent: pod.runtime?.container?.cpuPercent ?? null,
         memory_percent: pod.runtime?.container?.memoryPercent ?? null,
       },
-      ports:
-        pod.runtime?.ports?.map((p: any) => ({
-          ip: p.ip,
-          is_ip_public: p.isIpPublic,
-          private_port: p.privatePort,
-          public_port: p.publicPort,
-          type: p.type,
-        })) ?? [],
+      ports: (pod.runtime?.ports ?? []).map((p: RunpodPort) => ({
+        ip: p.ip,
+        is_ip_public: p.isIpPublic,
+        private_port: p.privatePort,
+        public_port: p.publicPort,
+        type: p.type,
+      })),
       workspace_url: `https://${order.pod_id}-8080.proxy.runpod.net/`,
     }
 
