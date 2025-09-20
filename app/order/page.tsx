@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { supabase } from "../../lib/supabaseClient"
+import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
 
@@ -17,6 +17,7 @@ function generateName() {
 
 export default function OrderPage() {
   const router = useRouter()
+  const supabase = getSupabaseClient() // ✅ instantiate Supabase client
   const [datacenter, setDatacenter] = useState("EU-CZ-1")
   const [storage, setStorage] = useState(50)
   const [gpu, setGpu] = useState("NVIDIA GeForce RTX 4090")
@@ -59,8 +60,10 @@ export default function OrderPage() {
     }
   }
 
-  const selectStyles = "w-full p-3 bg-background border border-border rounded-[var(--radius)] focus:outline-none focus:ring-2 focus:ring-secondary appearance-none"
-  const labelStyles = "block text-sm font-semibold mb-2 text-foreground text-left"
+  const selectStyles =
+    "w-full p-3 bg-background border border-border rounded-[var(--radius)] focus:outline-none focus:ring-2 focus:ring-secondary appearance-none"
+  const labelStyles =
+    "block text-sm font-semibold mb-2 text-foreground text-left"
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background/50 p-4 pt-20">
@@ -72,7 +75,9 @@ export default function OrderPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Datacenter */}
           <div>
-            <label htmlFor="datacenter" className={labelStyles}>Storage Location</label>
+            <label htmlFor="datacenter" className={labelStyles}>
+              Storage Location
+            </label>
             <select
               id="datacenter"
               value={datacenter}
@@ -100,7 +105,9 @@ export default function OrderPage() {
 
           {/* Storage */}
           <div>
-            <label htmlFor="storage" className={labelStyles}>Workspace Size (GB)</label>
+            <label htmlFor="storage" className={labelStyles}>
+              Workspace Size (GB)
+            </label>
             <select
               id="storage"
               value={storage}
@@ -116,14 +123,18 @@ export default function OrderPage() {
 
           {/* GPU */}
           <div>
-            <label htmlFor="gpu" className={labelStyles}>GPU Model</label>
+            <label htmlFor="gpu" className={labelStyles}>
+              GPU Model
+            </label>
             <select
               id="gpu"
               value={gpu}
               onChange={(e) => setGpu(e.target.value)}
               className={selectStyles}
             >
-              <option value="NVIDIA GeForce RTX 4090">NVIDIA GeForce RTX 4090 ✅</option>
+              <option value="NVIDIA GeForce RTX 4090">
+                NVIDIA GeForce RTX 4090 ✅
+              </option>
               <option disabled>H200 SXM</option>
               <option disabled>A40</option>
               <option disabled>RTX 5090</option>
@@ -158,7 +169,11 @@ export default function OrderPage() {
             {isSubmitting ? "Processing..." : "Submit Order"}
           </button>
         </form>
-        {message && <p className="mt-4 text-center text-sm text-muted-foreground">{message}</p>}
+        {message && (
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            {message}
+          </p>
+        )}
       </Card>
     </div>
   )
