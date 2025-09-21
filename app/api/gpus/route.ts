@@ -16,7 +16,7 @@ const GPU_AVAILABILITY_QUERY = `
 `
 
 const VISIBLE_STOCK_STATUSES = new Set([
-  "AVAILABLE!",
+  "AVAILABLE",
   "HIGH",
   "MEDIUM",
   "LOW",
@@ -73,17 +73,19 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const response = await fetch(RUNPOD_GRAPHQL_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${RUNPOD_API_KEY}`,
-      },
-      body: JSON.stringify({
-        query: GPU_AVAILABILITY_QUERY,
-        variables: { dataCenterId },
-      }),
-    })
+    const response = await fetch(
+      `${RUNPOD_GRAPHQL_ENDPOINT}?api_key=${RUNPOD_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: GPU_AVAILABILITY_QUERY,
+          variables: { dataCenterId },
+        }),
+      }
+    )
 
     const json = (await response.json().catch(() => ({}))) as GraphQLResponse
 
