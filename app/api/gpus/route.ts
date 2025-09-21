@@ -3,12 +3,14 @@ import { NextRequest, NextResponse } from "next/server"
 const RUNPOD_GRAPHQL_ENDPOINT = "https://api.runpod.io/graphql"
 
 const GPU_AVAILABILITY_QUERY = `
-  query AvailableGpuTypes($dataCenterId: String!) {
-    availableGpuTypes(input: { dataCenterId: $dataCenterId }) {
+  query GpuTypes($dataCenterId: String!) {
+    gpuTypes {
       id
       displayName
       memoryInGb
-      stockStatus
+      lowestPrice(input: { dataCenterId: $dataCenterId, gpuCount: 1 }) {
+        stockStatus
+      }
     }
   }
 `
@@ -32,40 +34,16 @@ type GpuType = {
 }
 
 type GraphQLError = { message?: string }
-
 type GraphQLResponse = {
-  data?: unknown
+  data?: {
+    gpuTypes?: Array<{
+      id: string
+      displayName: string
+      memoryInGb: number | null
+      lowestPrice?: { stockStatus?: string } | null
+    }>
+  }
   errors?: GraphQLError[]
-}
-
-function extractGpuTypes(payload: unknown): GpuType[] {
-  if (!payload) return []
-  if (Array.isArray(payload)) {
-    const typed = payload.filter((item): item is GpuType => {
-      if (!item || typeof item !== "object") return false
-      const maybe = item as Record<string, unknown>
-      return typeof maybe.id === "string" && typeof maybe.displayName === "string"
-    })
-    if (typed.length > 0) {
-      return typed.map((gpu) => ({
-        id: gpu.id,
-        displayName: gpu.displayName,
-        memoryInGb: typeof gpu.memoryInGb === "number" ? gpu.memoryInGb : null,
-        stockStatus:
-          typeof gpu.stockStatus === "string" ? gpu.stockStatus : "UNKNOWN",
-      }))
-    }
-    return []
-  }
-
-  if (typeof payload === "object") {
-    for (const value of Object.values(payload)) {
-      const result = extractGpuTypes(value)
-      if (result.length > 0) return result
-    }
-  }
-
-  return []
 }
 
 function shouldInclude(status: string) {
@@ -74,8 +52,7 @@ function shouldInclude(status: string) {
   if (VISIBLE_STOCK_STATUSES.has(normalized)) return true
   if (normalized.startsWith("AVAILABLE")) return true
   const keywords = ["SPOT", "LOW", "MEDIUM", "HIGH", "LIMITED", "RESERVE"]
-  if (keywords.some((keyword) => normalized.includes(keyword))) return true
-  return false
+  return keywords.some((keyword) => normalized.includes(keyword))
 }
 
 export async function GET(req: NextRequest) {
@@ -120,16 +97,17 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const rawGpus = extractGpuTypes(json.data)
-    const filtered = rawGpus.filter((gpu) => shouldInclude(gpu.stockStatus))
-    const normalized = filtered.map((gpu) => ({
-      id: gpu.id,
-      displayName: gpu.displayName,
-      memoryInGb: gpu.memoryInGb,
-      stockStatus: gpu.stockStatus,
-    }))
+    const gpus: GpuType[] =
+      json.data?.gpuTypes?.map((gpu) => ({
+        id: gpu.id,
+        displayName: gpu.displayName,
+        memoryInGb: gpu.memoryInGb,
+        stockStatus: gpu.lowestPrice?.stockStatus || "UNKNOWN",
+      })) || []
 
-    return NextResponse.json({ ok: true, gpus: normalized })
+    const filtered = gpus.filter((gpu) => shouldInclude(gpu.stockStatus))
+
+    return NextResponse.json({ ok: true, gpus: filtered })
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to fetch RunPod GPU data"

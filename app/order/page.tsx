@@ -55,12 +55,12 @@ export default function OrderPage() {
           `/api/runpod/gpus?dataCenterId=${encodeURIComponent(datacenter)}`,
           { signal: controller.signal }
         )
+
         type GpuApiResponse =
           | { ok: true; gpus: RunpodGpu[] }
           | { ok: false; error?: string }
-        const payload = (await resp
-          .json()
-          .catch(() => null)) as GpuApiResponse | null
+
+        const payload = (await resp.json().catch(() => null)) as GpuApiResponse | null
 
         if (!isCurrent) return
 
@@ -79,9 +79,7 @@ export default function OrderPage() {
         if (!isCurrent) return
         if (err instanceof Error && err.name === "AbortError") return
         const message =
-          err instanceof Error
-            ? err.message
-            : "Unexpected error fetching GPU availability"
+          err instanceof Error ? err.message : "Unexpected error fetching GPU availability"
         console.error("GPU availability error:", message)
         setGpuOptions([])
         setGpuError(message)
@@ -131,18 +129,49 @@ export default function OrderPage() {
     }
 
     // 🚀 Call API
+    const resp = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        name: generateName(),
+        datacenter_id: datacenter,
+        storage_gb: storage,
+        gpu_type: gpu,
+      }),
+    })
+
+    const data = await resp.json()
+    if (!data.ok) {
+      setMessage("❌ " + data.error)
+      setIsSubmitting(false)
+    } else {
+      setMessage("✅ Order submitted successfully! Redirecting...")
+      setTimeout(() => {
+        router.push("/dashboard")
+      }, 2000)
+    }
   }
 
-  const labelStyles = "block text-sm font-medium mb-1"
-  const selectStyles = "w-full p-2 border rounded bg-background text-foreground"
+  const selectStyles =
+    "w-full p-3 bg-background border border-border rounded-[var(--radius)] focus:outline-none focus:ring-2 focus:ring-secondary appearance-none"
+  const labelStyles =
+    "block text-sm font-semibold mb-2 text-foreground text-left"
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="min-h-screen flex items-center justify-center bg-background/50 p-4 pt-20">
+      <Card className="p-8 w-full max-w-lg">
+        <h2 className="text-3xl font-bold mb-6 text-center text-primary">
+          Configure Your Workspace
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Datacenter */}
           <div>
             <label htmlFor="datacenter" className={labelStyles}>
-              Datacenter
+              Storage Location
             </label>
             <select
               id="datacenter"
@@ -150,12 +179,26 @@ export default function OrderPage() {
               onChange={(e) => setDatacenter(e.target.value)}
               className={selectStyles}
             >
-              <option value="EU-CZ-1">EU-CZ-1</option>
-              <option value="US-CA-1">US-CA-1</option>
-              <option value="US-TX-1">US-TX-1</option>
+              <option value="AP-JP-1">Japan (AP-JP-1)</option>
+              <option value="CA-MTL-3">Canada (CA-MTL-3)</option>
+              <option value="CA-MTL-4">Canada (CA-MTL-4)</option>
+              <option value="EU-CZ-1">Europe (EU-CZ-1)</option>
+              <option value="EU-RO-1">Europe (EU-RO-1, S3)</option>
+              <option value="EU-SE-1">Europe (EU-SE-1)</option>
+              <option value="EUR-IS-1">Europe (EUR-IS-1, S3)</option>
+              <option value="EUR-NO-1">Europe (EUR-NO-1)</option>
+              <option value="US-CA-2">United States (US-CA-2, S3)</option>
+              <option value="US-GA-2">United States (US-GA-2)</option>
+              <option value="US-IL-1">United States (US-IL-1)</option>
+              <option value="US-KS-2">United States (US-KS-2, S3)</option>
+              <option value="US-MO-1">United States (US-MO-1)</option>
+              <option value="US-NC-1">United States (US-NC-1)</option>
+              <option value="US-TX-3">United States (US-TX-3)</option>
+              <option value="US-WA-1">United States (US-WA-1)</option>
             </select>
           </div>
 
+          {/* Storage */}
           <div>
             <label htmlFor="storage" className={labelStyles}>
               Workspace Size (GB)
