@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
@@ -15,94 +15,42 @@ function generateName() {
   return `${pick()}-${pick()}-${pick()}`
 }
 
-type RunpodGpu = {
-  id: string
-  displayName: string
-  memoryInGb: number | null
-  stockStatus: string
-}
-
-function formatStockStatus(status: string) {
-  if (!status) return "Unknown availability"
-  return status
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
+// ✅ static GPU list
+const gpuOptions = [
+  { id: "NVIDIA GeForce RTX 4090", label: "NVIDIA GeForce RTX 4090 ✅", disabled: false },
+  { id: "H200 SXM", label: "H200 SXM", disabled: true },
+  { id: "A40", label: "A40", disabled: true },
+  { id: "RTX 5090", label: "RTX 5090", disabled: true },
+  { id: "RTX 6000 Ada", label: "RTX 6000 Ada", disabled: true },
+  { id: "H100 SXM", label: "H100 SXM", disabled: true },
+  { id: "H100 PCIe", label: "H100 PCIe", disabled: true },
+  { id: "A100 PCIe", label: "A100 PCIe", disabled: true },
+  { id: "RTX PRO 6000", label: "RTX PRO 6000", disabled: true },
+  { id: "RTX 3090", label: "RTX 3090", disabled: true },
+  { id: "RTX A5000", label: "RTX A5000", disabled: true },
+  { id: "RTX A4500", label: "RTX A4500", disabled: true },
+  { id: "RTX 2000 Ada", label: "RTX 2000 Ada", disabled: true },
+  { id: "RTX 4000 Ada", label: "RTX 4000 Ada", disabled: true },
+  { id: "B200", label: "B200", disabled: true },
+  { id: "A100 SXM", label: "A100 SXM", disabled: true },
+  { id: "MI300X", label: "MI300X", disabled: true },
+  { id: "RTX A6000", label: "RTX A6000", disabled: true },
+  { id: "RTX A4000", label: "RTX A4000", disabled: true },
+  { id: "L4", label: "L4", disabled: true },
+  { id: "H100 NVL", label: "H100 NVL", disabled: true },
+  { id: "L40S", label: "L40S", disabled: true },
+  { id: "RTX PRO 6000 WK", label: "RTX PRO 6000 WK", disabled: true },
+  { id: "L40", label: "L40", disabled: true },
+]
 
 export default function OrderPage() {
   const router = useRouter()
   const supabase = getSupabaseClient() // ✅ instantiate Supabase client
   const [datacenter, setDatacenter] = useState("EU-CZ-1")
   const [storage, setStorage] = useState(50)
-  const [gpu, setGpu] = useState("")
-  const [gpuOptions, setGpuOptions] = useState<RunpodGpu[]>([])
-  const [isGpuLoading, setIsGpuLoading] = useState(false)
-  const [gpuError, setGpuError] = useState<string | null>(null)
+  const [gpu, setGpu] = useState(gpuOptions[0].id)
   const [message, setMessage] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  useEffect(() => {
-    let isCurrent = true
-    const controller = new AbortController()
-
-    async function loadGpuOptions() {
-      setIsGpuLoading(true)
-      setGpuError(null)
-
-      try {
-        const resp = await fetch(
-          `/api/runpod/gpus?dataCenterId=${encodeURIComponent(datacenter)}`,
-          { signal: controller.signal }
-        )
-
-        type GpuApiResponse =
-          | { ok: true; gpus: RunpodGpu[] }
-          | { ok: false; error?: string }
-
-        const payload = (await resp.json().catch(() => null)) as GpuApiResponse | null
-
-        if (!isCurrent) return
-
-        if (!resp.ok || !payload || payload.ok !== true) {
-          const errorMessage =
-            (payload && "error" in payload && payload.error) ||
-            `Unable to load GPU options (status ${resp.status})`
-          console.error("GPU availability fetch failed:", errorMessage)
-          setGpuOptions([])
-          setGpuError(errorMessage)
-          return
-        }
-
-        setGpuOptions(payload.gpus)
-      } catch (err) {
-        if (!isCurrent) return
-        if (err instanceof Error && err.name === "AbortError") return
-        const message =
-          err instanceof Error ? err.message : "Unexpected error fetching GPU availability"
-        console.error("GPU availability error:", message)
-        setGpuOptions([])
-        setGpuError(message)
-      } finally {
-        if (isCurrent) setIsGpuLoading(false)
-      }
-    }
-
-    loadGpuOptions()
-
-    return () => {
-      isCurrent = false
-      controller.abort()
-    }
-  }, [datacenter])
-
-  useEffect(() => {
-    if (gpuOptions.length > 0) {
-      setGpu(gpuOptions[0].id)
-    } else {
-      setGpu("")
-    }
-  }, [gpuOptions])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -226,39 +174,13 @@ export default function OrderPage() {
               value={gpu}
               onChange={(e) => setGpu(e.target.value)}
               className={selectStyles}
-              disabled={isGpuLoading || gpuOptions.length === 0}
             >
-              {isGpuLoading ? (
-                <option value="">Loading GPU availability...</option>
-              ) : gpuOptions.length > 0 ? (
-                gpuOptions.map((option) => {
-                  const showId = option.id !== option.displayName
-                  const memoryLabel =
-                    typeof option.memoryInGb === "number"
-                      ? `${option.memoryInGb} GB`
-                      : null
-                  const stockLabel = formatStockStatus(option.stockStatus)
-                  const parts = [stockLabel]
-                  if (memoryLabel) parts.unshift(memoryLabel)
-                  const meta = parts.length > 0 ? ` • ${parts.join(" • ")}` : ""
-
-                  return (
-                    <option key={option.id} value={option.id}>
-                      {option.displayName}
-                      {showId ? ` (${option.id})` : ""}
-                      {meta}
-                    </option>
-                  )
-                })
-              ) : (
-                <option value="">No GPUs available</option>
-              )}
+              {gpuOptions.map((g) => (
+                <option key={g.id} value={g.id} disabled={g.disabled}>
+                  {g.label}
+                </option>
+              ))}
             </select>
-            {gpuError && (
-              <p className="mt-2 text-xs text-destructive">
-                Unable to load GPU list. {gpuError}
-              </p>
-            )}
           </div>
 
           <button
