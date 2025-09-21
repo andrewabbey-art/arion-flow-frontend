@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "@/lib/supabaseClient"
+import Image from "next/image"
 
 interface Profile {
   first_name: string
@@ -43,7 +44,6 @@ export default function NavBar() {
 
     loadUser()
 
-    // 🔄 listen for login/logout
     const { data: listener } = supabase.auth.onAuthStateChange(() => {
       loadUser()
     })
@@ -60,8 +60,16 @@ export default function NavBar() {
 
   return (
     <nav className="w-full bg-card border-b border-border p-4 flex justify-between items-center">
-      <Link href="/" className="text-lg font-bold text-primary">
-        Arion Flow
+      {/* 🔹 Logo + Brand */}
+      <Link href="/" className="flex items-center gap-2">
+        <Image
+          src="/arion-wave-icon.svg"
+          alt="Arion Flow Logo"
+          width={80}
+          height={80}
+          priority
+        />
+        <span className="text-lg font-bold text-primary">Arion Flow</span>
       </Link>
 
       <div className="flex items-center gap-4">
