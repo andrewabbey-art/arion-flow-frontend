@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "../../../../../lib/supabaseClient";
 
 const RUNPOD_GRAPHQL_ENDPOINT = "https://api.runpod.io/graphql";
-const RUNPOD_API_URL = "https://api.runpod.io/v1";
+const RUNPOD_API_URL = "https://rest.runpod.io/v1"; // ✅ fixed to REST endpoint
 
 const TERMINATE_MUTATION = `
   mutation podTerminate($input: PodTerminateInput!) {
@@ -33,7 +33,7 @@ export async function POST(
       return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
     }
 
-    // 2) Terminate pod via GraphQL
+    // 2) Terminate Pod (GraphQL)
     const gqlResp = await fetch(RUNPOD_GRAPHQL_ENDPOINT, {
       method: "POST",
       headers: {
@@ -65,7 +65,8 @@ export async function POST(
         },
       });
 
-      if (vResp.status === 204) {
+      // ✅ accept both 200 + 204
+      if ([200, 204].includes(vResp.status)) {
         workspaceDeleted = true;
       } else {
         const vText = await vResp.text();
@@ -88,6 +89,7 @@ export async function POST(
       console.error("DB update error:", updateErr);
     }
 
+    // 5) Return result
     return NextResponse.json({
       ok: true,
       deletedWorkspace: workspaceDeleted,
