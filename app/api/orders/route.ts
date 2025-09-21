@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       name: string;
     } = await req.json();
 
-    // 2) Insert order in Supabase
+    // 2) Insert order in Supabase with VALID status
     const supabase = getSupabaseClient();
     const { data: order, error: insertError } = await supabase
       .from("orders")
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
         datacenter_id,
         storage_gb,
         gpu_type,
-        status: "provisioning",
+        status: "pending", // ✅ always valid
       })
       .select()
       .single();
@@ -95,7 +95,7 @@ export async function POST(req: Request) {
 
     // 5) Poll for pod readiness (up to 60s)
     let podReady = false;
-    for (let i = 0; i < 12; i++) { // 12 x 5s = 60s
+    for (let i = 0; i < 12; i++) { // 12 × 5s = 60s
       await new Promise((r) => setTimeout(r, 5000));
 
       const statusResp = await fetch(`https://rest.runpod.io/v1/pods/${podId}`, {
@@ -113,11 +113,11 @@ export async function POST(req: Request) {
 
     const workspaceUrl = `https://${podId}.runpod.net`;
 
-    // 6) Update Supabase
+    // 6) Update Supabase with allowed statuses only
     const { error: updateError } = await supabase
       .from("orders")
       .update({
-        status: podReady ? "active" : "provisioning",
+        status: podReady ? "running" : "pending", // ✅ valid only
         pod_id: podId,
         volume_id: volumeId,
         workspace_url: workspaceUrl,
@@ -126,7 +126,14 @@ export async function POST(req: Request) {
     if (updateError) throw new Error("Supabase update error: " + updateError.message);
 
     // 7) Return
-    return NextResponse.json({ ok: true, orderId: order.id, podId, volumeId, workspaceUrl, podReady });
+    return NextResponse.json({
+      ok: true,
+      orderId: order.id,
+      podId,
+      volumeId,
+      workspaceUrl,
+      podReady,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error occurred";
     console.error("Provisioning error:", message);
