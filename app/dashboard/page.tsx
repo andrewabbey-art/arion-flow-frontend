@@ -17,23 +17,14 @@ type ContainerMetrics = {
   cpu_percent: number | null;
   memory_percent: number | null;
 };
-type Port = {
-  ip: string;
-  is_ip_public: boolean;
-  private_port: number;
-  public_port: number;
-  type: string;
-};
 type Telemetry = {
   pod_id: string;
   desired_status: string;
   gpu_count: number;
   gpu_type: string;
-  gpu_type_id?: string;
   uptime_seconds: number;
   gpu_metrics: GpuMetric[];
   container_metrics: ContainerMetrics;
-  ports: Port[];
   workspace_url: string;
 };
 type Order = {
@@ -53,16 +44,27 @@ export default function DashboardPage() {
   const [terminateTarget, setTerminateTarget] = useState<string | null>(null);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
 
+  // ✅ Load user profile and check authorization
   useEffect(() => {
-    async function loadUserOrders() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push("/auth");
         return;
       }
 
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("authorized")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.authorized) {
+        router.push("/access-pending");
+        return;
+      }
+
+      // Load this user’s orders
       const { data, error } = await supabase
         .from("orders")
         .select("id, status, workspace_url")
@@ -80,9 +82,10 @@ export default function DashboardPage() {
       setStatus(`Displaying ${data.length} active workspace(s).`);
     }
 
-    loadUserOrders();
+    checkAuth();
   }, [router, supabase]);
 
+  // 📡 Refresh telemetry
   useEffect(() => {
     if (orders.length === 0) return;
 
@@ -94,12 +97,7 @@ export default function DashboardPage() {
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? {
-                    ...o,
-                    telemetry: json.telemetry,
-                    workspace_url: json.telemetry.workspace_url,
-                    error: undefined,
-                  }
+                ? { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url, error: undefined }
                 : o
             )
           );
@@ -115,9 +113,7 @@ export default function DashboardPage() {
       } catch {
         setOrders((prev) =>
           prev.map((o) =>
-            o.id === orderId
-              ? { ...o, error: "Telemetry request failed", telemetry: undefined }
-              : o
+            o.id === orderId ? { ...o, error: "Telemetry request failed", telemetry: undefined } : o
           )
         );
       }
@@ -129,8 +125,7 @@ export default function DashboardPage() {
     }, 15000);
 
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders.length]); // avoid resetting interval on every telemetry update
+  }, [orders.length]);
 
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -168,7 +163,6 @@ export default function DashboardPage() {
 
       if (action === "terminate") {
         alert(json.deletedWorkspace ? "Pod terminated and workspace deleted." : "Pod terminated, workspace kept.");
-        // remove from UI immediately
         setOrders((prev) => prev.filter((o) => o.id !== orderId));
       } else {
         alert(`Instance ${action} command sent successfully.`);
@@ -243,14 +237,8 @@ export default function DashboardPage() {
                         <hr className="border-border/50 my-3" />
                         {order.telemetry.container_metrics && (
                           <>
-                            <Metric
-                              label="CPU Utilization"
-                              value={`${order.telemetry.container_metrics.cpu_percent ?? "N/A"}%`}
-                            />
-                            <Metric
-                              label="RAM Utilization"
-                              value={`${order.telemetry.container_metrics.memory_percent ?? "N/A"}%`}
-                            />
+                            <Metric label="CPU Utilization" value={`${order.telemetry.container_metrics.cpu_percent ?? "N/A"}%`} />
+                            <Metric label="RAM Utilization" value={`${order.telemetry.container_metrics.memory_percent ?? "N/A"}%`} />
                           </>
                         )}
                         {order.telemetry.gpu_metrics.map((g, i) => (
