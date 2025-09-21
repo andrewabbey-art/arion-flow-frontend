@@ -90,15 +90,38 @@ export default function SignupPage() {
       const user = signUpData.user
       if (!user) throw new Error("User registration failed.")
 
-      // ✅ Insert profile with authorized = false
-      const { error: profileError } = await supabase.from("profiles").insert({
+      // ✅ Insert profile with authorized = false (handle existing profile gracefully)
+      const profilePayload = {
         id: user.id,
         first_name: trimmedData.firstName,
         last_name: trimmedData.lastName,
         job_title: trimmedData.jobTitle || null,
         authorized: false,
-      })
-      if (profileError) throw new Error(profileError.message)
+      }
+
+      const { error: profileError } = await supabase.from("profiles").insert(profilePayload)
+      if (profileError) {
+        const normalizedMessage = profileError.message?.toLowerCase() ?? ""
+        const isDuplicateKeyError =
+          profileError.code === "23505" ||
+          profileError.code === "409" ||
+          normalizedMessage.includes("duplicate key")
+
+        if (!isDuplicateKeyError) {
+          throw new Error(profileError.message)
+        }
+
+        const { error: profileUpdateError } = await supabase
+          .from("profiles")
+          .update({
+            first_name: profilePayload.first_name,
+            last_name: profilePayload.last_name,
+            job_title: profilePayload.job_title,
+          })
+          .eq("id", user.id)
+
+        if (profileUpdateError) throw new Error(profileUpdateError.message)
+      }
 
       // ✅ Create organization
       const { data: organizationData, error: organizationError } = await supabase
