@@ -16,7 +16,7 @@ const GPU_AVAILABILITY_QUERY = `
 `
 
 const VISIBLE_STOCK_STATUSES = new Set([
-  "AVAILABLE",
+  "AVAILABLE!",
   "HIGH",
   "MEDIUM",
   "LOW",
