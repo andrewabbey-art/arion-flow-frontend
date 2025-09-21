@@ -29,18 +29,33 @@ export default function OrderPage() {
     setIsSubmitting(true)
     setMessage("Submitting your order...")
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+    // 🔐 Ensure logged in
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
       setMessage("You must be logged in to place an order.")
       router.push("/auth")
+      setIsSubmitting(false)
       return
     }
 
+    // 🔑 Get access token
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
+    if (sessionError || !accessToken) {
+      setMessage("Unable to verify your session. Please sign in again.")
+      router.push("/auth")
+      setIsSubmitting(false)
+      return
+    }
+
+    // 🚀 Call API
     const resp = await fetch("/api/orders", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({
-        userId: user.id,
         name: generateName(),
         datacenter_id: datacenter,
         storage_gb: storage,
