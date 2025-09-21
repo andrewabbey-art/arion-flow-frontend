@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [status, setStatus] = useState("Loading your orders...");
   const [terminateTarget, setTerminateTarget] = useState<string | null>(null);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState<string | null>(null);
 
   // ✅ Load user profile and check authorization
   useEffect(() => {
@@ -55,13 +56,18 @@ export default function DashboardPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("authorized")
+        .select("authorized, first_name")
         .eq("id", user.id)
         .single();
 
       if (!profile?.authorized) {
         router.push("/access-pending");
         return;
+      }
+
+      // store first name for welcome message
+      if (profile.first_name) {
+        setFirstName(profile.first_name);
       }
 
       // Load this user’s orders
@@ -179,7 +185,9 @@ export default function DashboardPage() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-10 flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-4xl font-bold font-heading">Dashboard</h1>
+            <h1 className="text-4xl font-bold font-heading">
+              {firstName ? `Welcome back, ${firstName}` : "Dashboard"}
+            </h1>
             <p className="text-muted-foreground mt-2">{status}</p>
           </div>
           <Link
