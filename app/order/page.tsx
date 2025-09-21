@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { getSupabaseClient } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
@@ -15,14 +15,96 @@ function generateName() {
   return `${pick()}-${pick()}-${pick()}`
 }
 
+type RunpodGpu = {
+  id: string
+  displayName: string
+  memoryInGb: number | null
+  stockStatus: string
+}
+
+function formatStockStatus(status: string) {
+  if (!status) return "Unknown availability"
+  return status
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 export default function OrderPage() {
   const router = useRouter()
   const supabase = getSupabaseClient() // ✅ instantiate Supabase client
   const [datacenter, setDatacenter] = useState("EU-CZ-1")
   const [storage, setStorage] = useState(50)
-  const [gpu, setGpu] = useState("NVIDIA GeForce RTX 4090")
+  const [gpu, setGpu] = useState("")
+  const [gpuOptions, setGpuOptions] = useState<RunpodGpu[]>([])
+  const [isGpuLoading, setIsGpuLoading] = useState(false)
+  const [gpuError, setGpuError] = useState<string | null>(null)
   const [message, setMessage] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    let isCurrent = true
+    const controller = new AbortController()
+
+    async function loadGpuOptions() {
+      setIsGpuLoading(true)
+      setGpuError(null)
+
+      try {
+        const resp = await fetch(
+          `/api/runpod/gpus?dataCenterId=${encodeURIComponent(datacenter)}`,
+          { signal: controller.signal }
+        )
+        type GpuApiResponse =
+          | { ok: true; gpus: RunpodGpu[] }
+          | { ok: false; error?: string }
+        const payload = (await resp
+          .json()
+          .catch(() => null)) as GpuApiResponse | null
+
+        if (!isCurrent) return
+
+        if (!resp.ok || !payload || payload.ok !== true) {
+          const errorMessage =
+            (payload && "error" in payload && payload.error) ||
+            `Unable to load GPU options (status ${resp.status})`
+          console.error("GPU availability fetch failed:", errorMessage)
+          setGpuOptions([])
+          setGpuError(errorMessage)
+          return
+        }
+
+        setGpuOptions(payload.gpus)
+      } catch (err) {
+        if (!isCurrent) return
+        if (err instanceof Error && err.name === "AbortError") return
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Unexpected error fetching GPU availability"
+        console.error("GPU availability error:", message)
+        setGpuOptions([])
+        setGpuError(message)
+      } finally {
+        if (isCurrent) setIsGpuLoading(false)
+      }
+    }
+
+    loadGpuOptions()
+
+    return () => {
+      isCurrent = false
+      controller.abort()
+    }
+  }, [datacenter])
+
+  useEffect(() => {
+    if (gpuOptions.length > 0) {
+      setGpu(gpuOptions[0].id)
+    } else {
+      setGpu("")
+    }
+  }, [gpuOptions])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -49,49 +131,18 @@ export default function OrderPage() {
     }
 
     // 🚀 Call API
-    const resp = await fetch("/api/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        name: generateName(),
-        datacenter_id: datacenter,
-        storage_gb: storage,
-        gpu_type: gpu,
-      }),
-    })
-
-    const data = await resp.json()
-    if (!data.ok) {
-      setMessage("❌ " + data.error)
-      setIsSubmitting(false)
-    } else {
-      setMessage("✅ Order submitted successfully! Redirecting...")
-      setTimeout(() => {
-        router.push("/dashboard")
-      }, 2000)
-    }
   }
 
-  const selectStyles =
-    "w-full p-3 bg-background border border-border rounded-[var(--radius)] focus:outline-none focus:ring-2 focus:ring-secondary appearance-none"
-  const labelStyles =
-    "block text-sm font-semibold mb-2 text-foreground text-left"
+  const labelStyles = "block text-sm font-medium mb-1"
+  const selectStyles = "w-full p-2 border rounded bg-background text-foreground"
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background/50 p-4 pt-20">
-      <Card className="p-8 w-full max-w-lg">
-        <h2 className="text-3xl font-bold mb-6 text-center text-primary">
-          Configure Your Workspace
-        </h2>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Datacenter */}
+    <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <Card>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="datacenter" className={labelStyles}>
-              Storage Location
+              Datacenter
             </label>
             <select
               id="datacenter"
@@ -99,26 +150,12 @@ export default function OrderPage() {
               onChange={(e) => setDatacenter(e.target.value)}
               className={selectStyles}
             >
-              <option value="AP-JP-1">Japan (AP-JP-1)</option>
-              <option value="CA-MTL-3">Canada (CA-MTL-3)</option>
-              <option value="CA-MTL-4">Canada (CA-MTL-4)</option>
-              <option value="EU-CZ-1">Europe (EU-CZ-1)</option>
-              <option value="EU-RO-1">Europe (EU-RO-1, S3)</option>
-              <option value="EU-SE-1">Europe (EU-SE-1)</option>
-              <option value="EUR-IS-1">Europe (EUR-IS-1, S3)</option>
-              <option value="EUR-NO-1">Europe (EUR-NO-1)</option>
-              <option value="US-CA-2">United States (US-CA-2, S3)</option>
-              <option value="US-GA-2">United States (US-GA-2)</option>
-              <option value="US-IL-1">United States (US-IL-1)</option>
-              <option value="US-KS-2">United States (US-KS-2, S3)</option>
-              <option value="US-MO-1">United States (US-MO-1)</option>
-              <option value="US-NC-1">United States (US-NC-1)</option>
-              <option value="US-TX-3">United States (US-TX-3)</option>
-              <option value="US-WA-1">United States (US-WA-1)</option>
+              <option value="EU-CZ-1">EU-CZ-1</option>
+              <option value="US-CA-1">US-CA-1</option>
+              <option value="US-TX-1">US-TX-1</option>
             </select>
           </div>
 
-          {/* Storage */}
           <div>
             <label htmlFor="storage" className={labelStyles}>
               Workspace Size (GB)
@@ -146,34 +183,39 @@ export default function OrderPage() {
               value={gpu}
               onChange={(e) => setGpu(e.target.value)}
               className={selectStyles}
+              disabled={isGpuLoading || gpuOptions.length === 0}
             >
-              <option value="NVIDIA GeForce RTX 4090">
-                NVIDIA GeForce RTX 4090 ✅
-              </option>
-              <option disabled>H200 SXM</option>
-              <option disabled>A40</option>
-              <option disabled>RTX 5090</option>
-              <option disabled>RTX 6000 Ada</option>
-              <option disabled>H100 SXM</option>
-              <option disabled>H100 PCIe</option>
-              <option disabled>A100 PCIe</option>
-              <option disabled>RTX PRO 6000</option>
-              <option disabled>RTX 3090</option>
-              <option disabled>RTX A5000</option>
-              <option disabled>RTX A4500</option>
-              <option disabled>RTX 2000 Ada</option>
-              <option disabled>RTX 4000 Ada</option>
-              <option disabled>B200</option>
-              <option disabled>A100 SXM</option>
-              <option disabled>MI300X</option>
-              <option disabled>RTX A6000</option>
-              <option disabled>RTX A4000</option>
-              <option disabled>L4</option>
-              <option disabled>H100 NVL</option>
-              <option disabled>L40S</option>
-              <option disabled>RTX PRO 6000 WK</option>
-              <option disabled>L40</option>
+              {isGpuLoading ? (
+                <option value="">Loading GPU availability...</option>
+              ) : gpuOptions.length > 0 ? (
+                gpuOptions.map((option) => {
+                  const showId = option.id !== option.displayName
+                  const memoryLabel =
+                    typeof option.memoryInGb === "number"
+                      ? `${option.memoryInGb} GB`
+                      : null
+                  const stockLabel = formatStockStatus(option.stockStatus)
+                  const parts = [stockLabel]
+                  if (memoryLabel) parts.unshift(memoryLabel)
+                  const meta = parts.length > 0 ? ` • ${parts.join(" • ")}` : ""
+
+                  return (
+                    <option key={option.id} value={option.id}>
+                      {option.displayName}
+                      {showId ? ` (${option.id})` : ""}
+                      {meta}
+                    </option>
+                  )
+                })
+              ) : (
+                <option value="">No GPUs available</option>
+              )}
             </select>
+            {gpuError && (
+              <p className="mt-2 text-xs text-destructive">
+                Unable to load GPU list. {gpuError}
+              </p>
+            )}
           </div>
 
           <button
