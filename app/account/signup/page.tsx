@@ -96,7 +96,7 @@ export default function SignupPage() {
         first_name: trimmedData.firstName,
         last_name: trimmedData.lastName,
         job_title: trimmedData.jobTitle || null,
-        authorized: false, // 👈 NEW: default to false
+        authorized: false,
       })
       if (profileError) throw new Error(profileError.message)
 
@@ -140,10 +140,107 @@ export default function SignupPage() {
           Start streamlining your team&apos;s operations in just a few steps.
         </p>
 
-        {/* 🔧 Form stays unchanged */}
         <form className="space-y-6" onSubmit={handleSubmit} noValidate>
-          {/* first/last/email/password/org/jobTitle inputs… */}
-          {/* … keep exactly as you had them */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="firstName" className="text-sm font-medium text-muted-foreground">
+                First name
+              </label>
+              <input
+                id="firstName"
+                type="text"
+                value={formData.firstName}
+                onChange={(e) => handleChange("firstName", e.target.value)}
+                className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-foreground"
+                required
+              />
+              {errors.firstName && <p className="text-sm text-red-400">{errors.firstName}</p>}
+            </div>
+
+            <div>
+              <label htmlFor="lastName" className="text-sm font-medium text-muted-foreground">
+                Last name
+              </label>
+              <input
+                id="lastName"
+                type="text"
+                value={formData.lastName}
+                onChange={(e) => handleChange("lastName", e.target.value)}
+                className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-foreground"
+                required
+              />
+              {errors.lastName && <p className="text-sm text-red-400">{errors.lastName}</p>}
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="email" className="text-sm font-medium text-muted-foreground">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleChange("email", e.target.value)}
+              className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-foreground"
+              required
+            />
+            {errors.email && <p className="text-sm text-red-400">{errors.email}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="password" className="text-sm font-medium text-muted-foreground">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={formData.password}
+              onChange={(e) => handleChange("password", e.target.value)}
+              className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-foreground"
+              required
+            />
+            {errors.password && <p className="text-sm text-red-400">{errors.password}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="organizationName" className="text-sm font-medium text-muted-foreground">
+              Organization name
+            </label>
+            <input
+              id="organizationName"
+              type="text"
+              value={formData.organizationName}
+              onChange={(e) => handleChange("organizationName", e.target.value)}
+              className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-foreground"
+              required
+            />
+            {errors.organizationName && (
+              <p className="text-sm text-red-400">{errors.organizationName}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="jobTitle" className="text-sm font-medium text-muted-foreground">
+              Job title (optional)
+            </label>
+            <input
+              id="jobTitle"
+              type="text"
+              value={formData.jobTitle}
+              onChange={(e) => handleChange("jobTitle", e.target.value)}
+              className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-foreground"
+            />
+            {errors.jobTitle && <p className="text-sm text-red-400">{errors.jobTitle}</p>}
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full rounded-lg bg-primary px-4 py-3 text-center text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
+          >
+            {isLoading ? "Creating Account…" : "Create Account"}
+          </button>
         </form>
 
         {errors.general && (
