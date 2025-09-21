@@ -287,7 +287,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Terminate modal */}
+      {/* ✅ Terminate modal restored */}
       <TerminateModal
         open={terminateTarget !== null}
         onClose={() => setTerminateTarget(null)}
