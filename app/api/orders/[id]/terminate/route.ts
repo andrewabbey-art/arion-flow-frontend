@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "../../../../../lib/supabaseClient";
 
 const RUNPOD_GRAPHQL_ENDPOINT = "https://api.runpod.io/graphql";
+const RUNPOD_API_URL = "https://api.runpod.io/v1";
 
 const TERMINATE_MUTATION = `
   mutation podTerminate($input: PodTerminateInput!) {
@@ -10,18 +11,21 @@ const TERMINATE_MUTATION = `
 `;
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await context.params;
+    const { deleteWorkspace } = await req.json().catch(() => ({ deleteWorkspace: false }));
+
     const supabase = getSupabaseClient();
     const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY;
     if (!RUNPOD_API_KEY) throw new Error("Missing RUNPOD_API_KEY");
 
+    // 1) Load order
     const { data: order, error } = await supabase
       .from("orders")
-      .select("id, pod_id")
+      .select("id, pod_id, volume_id")
       .eq("id", id)
       .single();
 
@@ -29,6 +33,7 @@ export async function POST(
       return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
     }
 
+    // 2) Terminate pod via GraphQL
     const gqlResp = await fetch(RUNPOD_GRAPHQL_ENDPOINT, {
       method: "POST",
       headers: {
@@ -37,7 +42,7 @@ export async function POST(
       },
       body: JSON.stringify({
         query: TERMINATE_MUTATION,
-        variables: { input: { podId: order.pod_id } }, // PodTerminateInput
+        variables: { input: { podId: order.pod_id } },
       }),
     });
 
@@ -49,8 +54,45 @@ export async function POST(
       return NextResponse.json({ ok: false, error: errMsg }, { status: 502 });
     }
 
-    // podTerminate returns null on success
-    return NextResponse.json({ ok: true, result: gqlJson.data.podTerminate });
+    // 3) Optionally delete workspace volume
+    let workspaceDeleted = false;
+    if (deleteWorkspace && order.volume_id) {
+      const vResp = await fetch(`${RUNPOD_API_URL}/networkvolumes/${order.volume_id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${RUNPOD_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (vResp.status === 204) {
+        workspaceDeleted = true;
+      } else {
+        const vText = await vResp.text();
+        console.warn(`Failed to delete volume: ${vResp.status} - ${vText}`);
+      }
+    }
+
+    // 4) Update DB lifecycle flags
+    const { error: updateErr } = await supabase
+      .from("orders")
+      .update({
+        status: "deleted",
+        workspace_deleted: workspaceDeleted,
+        volume_id: workspaceDeleted ? null : order.volume_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (updateErr) {
+      console.error("DB update error:", updateErr);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      deletedWorkspace: workspaceDeleted,
+      result: gqlJson.data.podTerminate,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
