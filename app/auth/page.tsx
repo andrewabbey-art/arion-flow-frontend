@@ -1,107 +1,97 @@
 "use client"
 
-import { useState } from "react"
-// import { getSupabaseClient } from "../../lib/supabaseClient" 
+import { useState, FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import Card from "@/components/card"
-import GoogleIcon from "@/components/icons/GoogleIcon"
-import AppleIcon from "@/components/icons/AppleIcon"
+import { getSupabaseClient } from "@/lib/supabaseClient"
 
 export default function AuthPage() {
   const router = useRouter()
-  // const supabase = getSupabaseClient()
+  const supabase = getSupabaseClient()
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [message, setMessage] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  async function handleSignup(e: React.FormEvent) {
+  async function handleLogin(e: FormEvent) {
     e.preventDefault()
-    setMessage("✅ Signup successful! Check your email for confirmation.")
+    setIsLoading(true)
+    setError(null)
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      setError(error.message)
+    } else if (data?.user) {
+      router.push("/dashboard")
+    }
+    setIsLoading(false)
   }
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setMessage("✅ Login successful! Redirecting…")
-    setTimeout(() => router.push("/dashboard"), 1500)
-  }
-
-  async function handleOAuth(provider: 'google' | 'apple') {
-    setMessage(`Redirecting to ${provider}...`)
+  async function handleOAuthLogin(provider: "google" | "apple") {
+    const { error } = await supabase.auth.signInWithOAuth({ provider })
+    if (error) setError(error.message)
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card>
-        <h2 className="text-3xl font-bold mb-6 text-center text-primary">
-          Welcome to Arion Flow
-        </h2>
-
-        <form className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-3 bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-            required
-          />
-
-          <div className="flex space-x-4 pt-2">
-            <button
-              type="button"
-              onClick={handleLogin}
-              className="flex-1 bg-primary text-primary-foreground font-bold p-3 rounded-lg hover:bg-primary/90 transition-opacity"
-            >
-              Log In
-            </button>
-            <button
-              type="button"
-              onClick={handleSignup}
-              className="flex-1 bg-border text-foreground font-bold p-3 rounded-lg hover:opacity-90 transition-opacity"
-            >
-              Sign Up
-            </button>
+    <main className="min-h-screen bg-background flex items-center justify-center p-6">
+      <Card className="w-full max-w-md p-8">
+        <h1 className="text-2xl font-bold text-center mb-6">Login to Arion Flow</h1>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm mb-1" htmlFor="email">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-lg border border-border px-3 py-2"
+              required
+            />
           </div>
+
+          <div>
+            <label className="block text-sm mb-1" htmlFor="password">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-lg border border-border px-3 py-2"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full rounded-lg bg-primary px-4 py-2 text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-70"
+          >
+            {isLoading ? "Logging in…" : "Login"}
+          </button>
         </form>
 
-        {message && <p className="mt-4 text-center text-sm text-muted-foreground">{message}</p>}
+        {error && <p className="mt-4 text-center text-sm text-red-500">{error}</p>}
 
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">
-              Or continue with
-            </span>
-          </div>
-        </div>
-
-        <div className="space-y-3">
+        <div className="mt-6 flex flex-col gap-2">
           <button
-            type="button"
-            onClick={() => handleOAuth('google')}
-            className="w-full flex items-center justify-center gap-3 border border-border rounded-lg p-3 text-sm font-semibold text-foreground hover:bg-border transition-colors"
+            onClick={() => handleOAuthLogin("google")}
+            className="w-full border border-border rounded-lg px-4 py-2 text-sm font-medium hover:bg-border/10"
           >
-            {/* FIX: Added size class to the icon */}
-            <GoogleIcon className="w-5 h-5" />
             Continue with Google
           </button>
           <button
-            type="button"
-            onClick={() => handleOAuth('apple')}
-            className="w-full flex items-center justify-center gap-3 border border-border rounded-lg p-3 text-sm font-semibold text-foreground hover:bg-border transition-colors"
+            onClick={() => handleOAuthLogin("apple")}
+            className="w-full border border-border rounded-lg px-4 py-2 text-sm font-medium hover:bg-border/10"
           >
-            {/* FIX: Added size class to the icon */}
-            <AppleIcon className="w-5 h-5" />
             Continue with Apple
           </button>
         </div>

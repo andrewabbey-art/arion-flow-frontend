@@ -1,60 +1,117 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import Image from "next/image"; // Import the Next.js Image component
-import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { getSupabaseClient } from "@/lib/supabaseClient"
 
-export default function Navbar() {
-  const pathname = usePathname();
+interface Profile {
+  first_name: string
+  last_name: string
+}
 
-  const links = [
-    { href: "/", label: "Home" },
-    { href: "/pricing", label: "Pricing" },
-    { href: "/contact", label: "Contact" },
-  ];
+export default function NavBar() {
+  const router = useRouter()
+  const supabase = getSupabaseClient()
+
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadUser() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setProfile(null)
+        setUserEmail(null)
+        return
+      }
+
+      setUserEmail(user.email ?? null)
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("first_name, last_name")
+        .eq("id", user.id)
+        .single()
+
+      if (!error && data) {
+        setProfile(data)
+      } else {
+        setProfile(null)
+      }
+    }
+
+    loadUser()
+
+    // 🔄 listen for login/logout
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      loadUser()
+    })
+
+    return () => {
+      listener?.subscription.unsubscribe()
+    }
+  }, [supabase])
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push("/auth")
+  }
 
   return (
-    <nav className="bg-background border-b border-border fixed top-0 left-0 right-0 z-50">
-      <div className="container mx-auto px-1 py-1 flex justify-between items-center">
-        {/* Logo / Brand with Icon */}
-        <Link href="/" className="flex items-center gap-2 text-xl font-bold text-primary">
-          <Image 
-            src="/arion-wave-icon.svg" 
-            alt="Arion Flow icon" 
-            width={80} 
-            height={80} 
-          />
-          <span>Arion Flow</span>
-        </Link>
+    <nav className="w-full bg-card border-b border-border p-4 flex justify-between items-center">
+      <Link href="/" className="text-lg font-bold text-primary">
+        Arion Flow
+      </Link>
 
-        {/* Right side navigation */}
-        <div className="flex items-center space-x-8">
-          {/* Page Links */}
-          <div className="hidden md:flex space-x-6">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`text-sm transition-colors ${
-                  pathname === link.href
-                    ? "text-primary font-semibold"
-                    : "text-muted-foreground hover:text-primary"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
+      <div className="flex items-center gap-4">
+        {profile || userEmail ? (
+          <>
+            <span className="text-sm text-muted-foreground">
+              Welcome,{" "}
+              {profile?.first_name || profile?.last_name
+                ? `${profile.first_name} ${profile.last_name}`
+                : userEmail}
+            </span>
 
-          {/* Auth Link */}
-          <Link
-            href="/auth"
-            className="text-primary text-sm font-semibold hover:opacity-80 transition-opacity"
-          >
-            Login / Sign Up
-          </Link>
-        </div>
+            <Link
+              href="/dashboard"
+              className="px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-border/10 transition-colors"
+            >
+              Dashboard
+            </Link>
+
+            <Link
+              href="/account"
+              className="px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-border/10 transition-colors"
+            >
+              My Account
+            </Link>
+
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 rounded-lg bg-secondary text-sm font-medium hover:bg-border transition-colors"
+            >
+              Logout
+            </button>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/auth"
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Login
+            </Link>
+            <Link
+              href="/account/signup"
+              className="px-4 py-2 rounded-lg border border-primary text-primary text-sm font-medium hover:bg-primary/10 transition-colors"
+            >
+              Create Account
+            </Link>
+          </>
+        )}
       </div>
     </nav>
-  );
+  )
 }
