@@ -183,6 +183,17 @@ export default function DashboardPage() {
     }
   };
 
+  // ✅ Added: derive workspace status
+  const getWorkspaceStatus = (order: Order) => {
+    if (!order.telemetry || order.telemetry.desired_status !== "RUNNING") {
+      return { label: "Offline", color: "bg-red-500", pulse: false };
+    }
+    if (order.telemetry.desired_status === "RUNNING" && !order.workspace_url) {
+      return { label: "Not Ready", color: "bg-yellow-500", pulse: true }; // ✅ Added pulse animation
+    }
+    return { label: "Online", color: "bg-green-500", pulse: false };
+  };
+
   return (
     <main className="min-h-screen w-full pt-24">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -206,20 +217,34 @@ export default function DashboardPage() {
             const disabled = busyOrderId === order.id;
             const disabledCls = disabled ? "opacity-50 pointer-events-none" : "";
 
+            const wsStatus = getWorkspaceStatus(order); // ✅ Added
+
             return (
               <Card key={order.id} className="p-0 overflow-hidden">
                 <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card/50 border-b border-border">
                   <div>
                     <h3 className="text-xl font-bold font-heading">Workspace ID #{order.id}</h3>
-                    <div className="flex items-center gap-2 mt-2 text-sm">
-                      <span
-                        className={`h-2 w-2 rounded-full ${
-                          order.telemetry?.desired_status === "RUNNING" ? "bg-green-500" : "bg-yellow-500"
-                        }`}
-                      ></span>
-                      <span className="text-muted-foreground">
-                        Status: {order.telemetry?.desired_status ?? order.status}
-                      </span>
+                    <div className="flex flex-col gap-1 mt-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            order.telemetry?.desired_status === "RUNNING" ? "bg-green-500" : "bg-yellow-500"
+                          }`}
+                        ></span>
+                        <span className="text-muted-foreground">
+                          Status: {order.telemetry?.desired_status ?? order.status}
+                        </span>
+                      </div>
+
+                      {/* ✅ Added: Workspace Status with pulse */}
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`h-2 w-2 rounded-full ${wsStatus.color} ${
+                            wsStatus.pulse ? "animate-pulse" : ""
+                          }`} // ✅ Added pulse animation
+                        ></span>
+                        <span className="text-muted-foreground">Workspace: {wsStatus.label}</span>
+                      </div>
                     </div>
                   </div>
 
