@@ -134,7 +134,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [orders.length]);
 
-  // ✅ Probe fix: check /favicon.ico via server-side /api/check-workspace
+  // ✅ Probe fix: check the workspace via server-side /api/check-workspace
   useEffect(() => {
     if (orders.length === 0) return;
 
@@ -146,11 +146,11 @@ export default function DashboardPage() {
         return;
       }
 
-      const probeUrl = order.workspace_url.replace(/\/$/, "") + "/favicon.ico"; // ✅ Probe fix
+      const workspaceUrl = order.workspace_url.replace(/\/$/, "");
 
       try {
         // ✅ Added: Use server-side proxy endpoint
-        const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(probeUrl)}`);
+        const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(workspaceUrl)}`);
         const json = await res.json();
         const ok = json?.status >= 200 && json?.status < 400; // ✅ Added
         setOrders((prev) =>
