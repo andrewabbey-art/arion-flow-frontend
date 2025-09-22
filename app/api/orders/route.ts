@@ -5,44 +5,42 @@ type NetworkVolumeCreateResponse = { id: string; [k: string]: unknown }
 type PodCreateResponse = { id: string; [k: string]: unknown }
 type PodStatusResponse = { id: string; desiredStatus: string; [k: string]: unknown }
 
-// ✅ Updated to handle all curated GPU options
+// ✅ Added: Updated mapping aligned with RunPod’s allowed GPU enum strings
 function normalizeGpuType(input?: string): string {
   if (!input) return "NVIDIA GeForce RTX 4090"
   const trimmed = input.trim()
 
-  // Map friendly labels → RunPod GPU type IDs / expected names
   const map: Record<string, string> = {
     // Starter
-    "Starter — RTX 3090 / L4 (24GB)": "RTX 3090",
-    "RTX 3090": "RTX 3090",
-    "L4": "L4",
+    "Starter — RTX 3090 / L4 (24GB)": "NVIDIA GeForce RTX 3090",
+    "RTX 3090": "NVIDIA GeForce RTX 3090",
+    "L4": "NVIDIA L4",
 
     // Creator
     "Creator — RTX 4090 / L40S (24–48GB)": "NVIDIA GeForce RTX 4090",
     "RTX 4090": "NVIDIA GeForce RTX 4090",
     "NVIDIA RTX 4090": "NVIDIA GeForce RTX 4090",
-    "L40S": "L40S",
+    "L40S": "NVIDIA L40S",
 
     // Studio
-    "Studio — A40 / A6000 / RTX 6000 Ada (48GB)": "A40",
-    "A40": "A40",
-    "A6000": "RTX A6000",
-    "RTX 6000 Ada": "RTX 6000 Ada",
+    "Studio — A40 / A6000 / RTX 6000 Ada (48GB)": "NVIDIA A40",
+    "A40": "NVIDIA A40",
+    "A6000": "NVIDIA RTX A6000",
+    "RTX 6000 Ada": "NVIDIA RTX 6000 Ada Generation",
 
     // Pro
-    "Pro — A100 (80GB)": "A100 PCIe",
-    "A100": "A100 PCIe",
-    "A100 PCIe": "A100 PCIe",
-    "A100 SXM": "A100 SXM",
+    "Pro — A100 (80GB)": "NVIDIA A100 80GB PCIe",
+    "A100": "NVIDIA A100 80GB PCIe",
+    "A100 PCIe": "NVIDIA A100 80GB PCIe",
+    "A100 SXM": "NVIDIA A100-SXM4-80GB",
 
     // Enterprise
-    "Enterprise — H100 / H200 (80–141GB)": "H100 PCIe",
-    "H100": "H100 PCIe",
-    "H100 PCIe": "H100 PCIe",
-    "H100 SXM": "H100 SXM",
-    "H100 NVL": "H100 NVL",
-    "H200": "H200 SXM",
-    "H200 SXM": "H200 SXM",
+    "Enterprise — H100 / H200 (80–141GB)": "NVIDIA H100 PCIe",
+    "H100": "NVIDIA H100 PCIe",
+    "H100 PCIe": "NVIDIA H100 PCIe",
+    "H100 SXM": "NVIDIA H100 80GB HBM3",
+    "H100 NVL": "NVIDIA H100 NVL",
+    "H200": "NVIDIA H200",
   }
 
   return map[trimmed] || trimmed
@@ -126,7 +124,7 @@ export async function POST(req: NextRequest) {
     if (!volumeId) throw new Error("No volumeId in response: " + volText)
 
     // 3️⃣ Create pod
-    const finalGpuTypeId = normalizeGpuType(gpu_type)
+    const finalGpuTypeId = normalizeGpuType(gpu_type) // ✅ Added mapping
     const podResp = await fetch("https://rest.runpod.io/v1/pods", {
       method: "POST",
       headers: { Authorization: `Bearer ${RUNPOD_API_KEY}`, "Content-Type": "application/json" },
