@@ -15,32 +15,13 @@ function generateName() {
   return `${pick()}-${pick()}-${pick()}`
 }
 
-// ✅ static GPU list
+// ✅ Added: simplified GPU options
 const gpuOptions = [
-  { id: "NVIDIA GeForce RTX 4090", label: "NVIDIA GeForce RTX 4090 ✅", disabled: false },
-  { id: "H200 SXM", label: "H200 SXM", disabled: true },
-  { id: "A40", label: "A40", disabled: true },
-  { id: "RTX 5090", label: "RTX 5090", disabled: true },
-  { id: "RTX 6000 Ada", label: "RTX 6000 Ada", disabled: true },
-  { id: "H100 SXM", label: "H100 SXM", disabled: true },
-  { id: "H100 PCIe", label: "H100 PCIe", disabled: true },
-  { id: "A100 PCIe", label: "A100 PCIe", disabled: true },
-  { id: "RTX PRO 6000", label: "RTX PRO 6000", disabled: true },
-  { id: "RTX 3090", label: "RTX 3090", disabled: true },
-  { id: "RTX A5000", label: "RTX A5000", disabled: true },
-  { id: "RTX A4500", label: "RTX A4500", disabled: true },
-  { id: "RTX 2000 Ada", label: "RTX 2000 Ada", disabled: true },
-  { id: "RTX 4000 Ada", label: "RTX 4000 Ada", disabled: true },
-  { id: "B200", label: "B200", disabled: true },
-  { id: "A100 SXM", label: "A100 SXM", disabled: true },
-  { id: "MI300X", label: "MI300X", disabled: true },
-  { id: "RTX A6000", label: "RTX A6000", disabled: true },
-  { id: "RTX A4000", label: "RTX A4000", disabled: true },
-  { id: "L4", label: "L4", disabled: true },
-  { id: "H100 NVL", label: "H100 NVL", disabled: true },
-  { id: "L40S", label: "L40S", disabled: true },
-  { id: "RTX PRO 6000 WK", label: "RTX PRO 6000 WK", disabled: true },
-  { id: "L40", label: "L40", disabled: true },
+  { id: "RTX 3090", label: "Starter — RTX 3090 / L4 (24GB)", disabled: false }, // ✅ Added
+  { id: "RTX 4090", label: "Creator — RTX 4090 / L40S (24–48GB)", disabled: false }, // ✅ Added
+  { id: "A40", label: "Studio — A40 / A6000 / RTX 6000 Ada (48GB)", disabled: false }, // ✅ Added
+  { id: "A100", label: "Pro — A100 (80GB)", disabled: false }, // ✅ Added
+  { id: "H100", label: "Enterprise — H100 / H200 (80–141GB)", disabled: false }, // ✅ Added
 ]
 
 export default function OrderPage() {

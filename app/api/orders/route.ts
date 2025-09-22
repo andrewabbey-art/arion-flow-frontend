@@ -5,14 +5,46 @@ type NetworkVolumeCreateResponse = { id: string; [k: string]: unknown }
 type PodCreateResponse = { id: string; [k: string]: unknown }
 type PodStatusResponse = { id: string; desiredStatus: string; [k: string]: unknown }
 
+// ✅ Updated to handle all curated GPU options
 function normalizeGpuType(input?: string): string {
   if (!input) return "NVIDIA GeForce RTX 4090"
   const trimmed = input.trim()
+
+  // Map friendly labels → RunPod GPU type IDs / expected names
   const map: Record<string, string> = {
+    // Starter
+    "Starter — RTX 3090 / L4 (24GB)": "RTX 3090",
+    "RTX 3090": "RTX 3090",
+    "L4": "L4",
+
+    // Creator
+    "Creator — RTX 4090 / L40S (24–48GB)": "NVIDIA GeForce RTX 4090",
     "RTX 4090": "NVIDIA GeForce RTX 4090",
-    "4090": "NVIDIA GeForce RTX 4090",
     "NVIDIA RTX 4090": "NVIDIA GeForce RTX 4090",
+    "L40S": "L40S",
+
+    // Studio
+    "Studio — A40 / A6000 / RTX 6000 Ada (48GB)": "A40",
+    "A40": "A40",
+    "A6000": "RTX A6000",
+    "RTX 6000 Ada": "RTX 6000 Ada",
+
+    // Pro
+    "Pro — A100 (80GB)": "A100 PCIe",
+    "A100": "A100 PCIe",
+    "A100 PCIe": "A100 PCIe",
+    "A100 SXM": "A100 SXM",
+
+    // Enterprise
+    "Enterprise — H100 / H200 (80–141GB)": "H100 PCIe",
+    "H100": "H100 PCIe",
+    "H100 PCIe": "H100 PCIe",
+    "H100 SXM": "H100 SXM",
+    "H100 NVL": "H100 NVL",
+    "H200": "H200 SXM",
+    "H200 SXM": "H200 SXM",
   }
+
   return map[trimmed] || trimmed
 }
 
