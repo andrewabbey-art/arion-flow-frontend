@@ -33,8 +33,8 @@ type Order = {
   workspace_url: string | null;
   telemetry?: Telemetry;
   error?: string;
-  pod_id?: string | null; // ✅ Added
-  wsOnline?: boolean; // ✅ Added
+  pod_id?: string | null;
+  wsOnline?: boolean;
 };
 
 export default function DashboardPage() {
@@ -134,7 +134,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [orders.length]);
 
-  // ✅ Modified: Poll workspace URLs directly to check 200–399
+  // ✅ Fixed: use GET + no-cors instead of HEAD
   useEffect(() => {
     if (orders.length === 0) return;
 
@@ -147,8 +147,12 @@ export default function DashboardPage() {
       }
 
       try {
-        const res = await fetch(order.workspace_url, { method: "HEAD" });
-        const ok = res.status >= 200 && res.status < 400; // ✅ Modified: accept 2xx + 3xx
+        const res = await fetch(order.workspace_url, {
+          method: "GET", // ✅ Fixed
+          mode: "no-cors", // ✅ Fixed
+        });
+        // In no-cors mode, we can’t read status. If fetch succeeds at all → online.
+        const ok = !!res; // ✅ Fixed
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o))
         );
