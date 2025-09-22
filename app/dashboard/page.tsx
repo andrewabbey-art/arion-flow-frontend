@@ -134,7 +134,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [orders.length]);
 
-  // ✅ Probe fix: check /favicon.ico instead of root (ComfyUI serves it only when ready)
+  // ✅ Probe fix: check /favicon.ico via server-side /api/check-workspace
   useEffect(() => {
     if (orders.length === 0) return;
 
@@ -149,12 +149,10 @@ export default function DashboardPage() {
       const probeUrl = order.workspace_url.replace(/\/$/, "") + "/favicon.ico"; // ✅ Probe fix
 
       try {
-        const res = await fetch(probeUrl, {
-          method: "GET",
-          mode: "no-cors", // ✅ We just care if it connects
-        });
-        // In no-cors, we can't read status → but if fetch succeeds, UI is up
-        const ok = !!res;
+        // ✅ Added: Use server-side proxy endpoint
+        const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(probeUrl)}`);
+        const json = await res.json();
+        const ok = json?.status >= 200 && json?.status < 400; // ✅ Added
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o))
         );
