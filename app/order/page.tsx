@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSupabaseClient } from "../../../lib/supabaseClient"
+import { getSupabaseClient } from "../../lib/supabaseClient"
 
 type NetworkVolumeCreateResponse = { id: string; [k: string]: unknown }
 type PodCreateResponse = { id: string; [k: string]: unknown }
