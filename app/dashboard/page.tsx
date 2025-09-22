@@ -134,7 +134,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [orders.length]);
 
-  // ✅ Fixed: use GET + no-cors instead of HEAD
+  // ✅ Probe fix: check /favicon.ico instead of root (ComfyUI serves it only when ready)
   useEffect(() => {
     if (orders.length === 0) return;
 
@@ -146,13 +146,15 @@ export default function DashboardPage() {
         return;
       }
 
+      const probeUrl = order.workspace_url.replace(/\/$/, "") + "/favicon.ico"; // ✅ Probe fix
+
       try {
-        const res = await fetch(order.workspace_url, {
-          method: "GET", // ✅ Fixed
-          mode: "no-cors", // ✅ Fixed
+        const res = await fetch(probeUrl, {
+          method: "GET",
+          mode: "no-cors", // ✅ We just care if it connects
         });
-        // In no-cors mode, we can’t read status. If fetch succeeds at all → online.
-        const ok = !!res; // ✅ Fixed
+        // In no-cors, we can't read status → but if fetch succeeds, UI is up
+        const ok = !!res;
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o))
         );
