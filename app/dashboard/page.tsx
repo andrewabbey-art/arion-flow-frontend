@@ -33,7 +33,8 @@ type Order = {
   workspace_url: string | null;
   telemetry?: Telemetry;
   error?: string;
-  pod_id?: string | null; // ✅ Added: make pod_id available in type
+  pod_id?: string | null; // ✅ Added
+  wsOnline?: boolean; // ✅ Added
 };
 
 export default function DashboardPage() {
@@ -66,17 +67,15 @@ export default function DashboardPage() {
         return;
       }
 
-      // store first name for welcome message
       if (profile.first_name) {
         setFirstName(profile.first_name);
       }
 
-      // Load this user’s orders
       const { data, error } = await supabase
         .from("orders")
-        .select("id, status, workspace_url, pod_id") // ✅ Added pod_id
+        .select("id, status, workspace_url, pod_id")
         .eq("user_id", user.id)
-        .neq("status", "deleted") // hide deleted
+        .neq("status", "deleted")
         .order("created_at", { ascending: false });
 
       if (error || !data || data.length === 0) {
@@ -85,7 +84,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // ✅ Added: filter out any with null pod_id
       const filtered = data.filter((o) => o.pod_id !== null);
       setOrders(filtered);
       setStatus(`Displaying ${filtered.length} active workspace(s).`);
@@ -136,6 +134,39 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [orders.length]);
 
+  // ✅ Modified: Poll workspace URLs directly to check 200–399
+  useEffect(() => {
+    if (orders.length === 0) return;
+
+    const checkWorkspaceStatus = async (order: Order) => {
+      if (!order.workspace_url) {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
+        );
+        return;
+      }
+
+      try {
+        const res = await fetch(order.workspace_url, { method: "HEAD" });
+        const ok = res.status >= 200 && res.status < 400; // ✅ Modified: accept 2xx + 3xx
+        setOrders((prev) =>
+          prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o))
+        );
+      } catch {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
+        );
+      }
+    };
+
+    orders.forEach((o) => checkWorkspaceStatus(o));
+    const interval = setInterval(() => {
+      orders.forEach((o) => checkWorkspaceStatus(o));
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [orders]);
+
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60);
     const hrs = Math.floor(mins / 60);
@@ -183,13 +214,12 @@ export default function DashboardPage() {
     }
   };
 
-  // ✅ Added: derive workspace status
   const getWorkspaceStatus = (order: Order) => {
     if (!order.telemetry || order.telemetry.desired_status !== "RUNNING") {
       return { label: "Offline", color: "bg-red-500", pulse: false };
     }
-    if (order.telemetry.desired_status === "RUNNING" && !order.workspace_url) {
-      return { label: "Not Ready", color: "bg-yellow-500", pulse: true }; // ✅ Added pulse animation
+    if (order.telemetry.desired_status === "RUNNING" && !order.wsOnline) {
+      return { label: "Not Ready", color: "bg-yellow-500", pulse: true };
     }
     return { label: "Online", color: "bg-green-500", pulse: false };
   };
@@ -217,7 +247,7 @@ export default function DashboardPage() {
             const disabled = busyOrderId === order.id;
             const disabledCls = disabled ? "opacity-50 pointer-events-none" : "";
 
-            const wsStatus = getWorkspaceStatus(order); // ✅ Added
+            const wsStatus = getWorkspaceStatus(order);
 
             return (
               <Card key={order.id} className="p-0 overflow-hidden">
@@ -236,12 +266,12 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
-                      {/* ✅ Added: Workspace Status with pulse */}
+                      {/* ✅ Workspace Status */}
                       <div className="flex items-center gap-2">
                         <span
                           className={`h-2 w-2 rounded-full ${wsStatus.color} ${
                             wsStatus.pulse ? "animate-pulse" : ""
-                          }`} // ✅ Added pulse animation
+                          }`}
                         ></span>
                         <span className="text-muted-foreground">Workspace: {wsStatus.label}</span>
                       </div>
@@ -323,7 +353,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ✅ Terminate modal restored */}
       <TerminateModal
         open={terminateTarget !== null}
         onClose={() => setTerminateTarget(null)}
