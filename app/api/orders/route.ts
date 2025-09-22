@@ -5,6 +5,9 @@ type NetworkVolumeCreateResponse = { id: string; [k: string]: unknown }
 type PodCreateResponse = { id: string; [k: string]: unknown }
 type PodStatusResponse = { id: string; desiredStatus: string; [k: string]: unknown }
 
+// ✅ Added: restrict regions
+const SUPPORTED_DATACENTERS = ["EUR-IS-1", "EU-RO-1", "EU-CZ-1", "US-KS-2", "US-CA-2"]
+
 // ✅ Added: Updated mapping aligned with RunPod’s allowed GPU enum strings
 function normalizeGpuType(input?: string): string {
   if (!input) return "NVIDIA GeForce RTX 4090"
@@ -95,6 +98,14 @@ export async function POST(req: NextRequest) {
       name: string
     } = await req.json()
 
+    // ✅ Added: validate datacenter region
+    if (!SUPPORTED_DATACENTERS.includes(datacenter_id)) {
+      return NextResponse.json(
+        { ok: false, error: `Region ${datacenter_id} not supported for network volumes.` },
+        { status: 400 }
+      )
+    }
+
     // 1️⃣ Insert order into Supabase
     const { data: order, error: insertError } = await supabase
       .from("orders")
@@ -124,7 +135,7 @@ export async function POST(req: NextRequest) {
     if (!volumeId) throw new Error("No volumeId in response: " + volText)
 
     // 3️⃣ Create pod
-    const finalGpuTypeId = normalizeGpuType(gpu_type) // ✅ Added mapping
+    const finalGpuTypeId = normalizeGpuType(gpu_type)
     const podResp = await fetch("https://rest.runpod.io/v1/pods", {
       method: "POST",
       headers: { Authorization: `Bearer ${RUNPOD_API_KEY}`, "Content-Type": "application/json" },
@@ -143,7 +154,21 @@ export async function POST(req: NextRequest) {
       }),
     })
     const podText = await podResp.text()
-    if (!podResp.ok) throw new Error("Pod create failed: " + podText)
+    if (!podResp.ok) {
+      // ✅ Added: clean up if pod creation fails
+      await fetch(`https://rest.runpod.io/v1/networkvolumes/${volumeId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${RUNPOD_API_KEY}` },
+      }).catch(() => console.warn("Failed to cleanup volume after pod error"))
+
+      await supabase.from("orders").update({
+        status: "failed",
+        failure_reason: "Pod creation failed: " + podText,
+      }).eq("id", order.id)
+
+      throw new Error("Pod create failed: " + podText)
+    }
+
     const podJson = JSON.parse(podText) as PodCreateResponse
     const podId = podJson.id
     if (!podId) throw new Error("No pod id in response: " + podText)
@@ -164,13 +189,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!podReady) {
+      // ✅ Added: handle orphaned volume if pod never runs
+      await fetch(`https://rest.runpod.io/v1/networkvolumes/${volumeId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${RUNPOD_API_KEY}` },
+      }).catch(() => console.warn("Failed to cleanup volume after pod timeout"))
+
+      await supabase.from("orders").update({
+        status: "failed",
+        failure_reason: "Pod did not reach RUNNING state in time",
+      }).eq("id", order.id)
+
+      return NextResponse.json({ ok: false, error: "Pod failed to start" }, { status: 500 })
+    }
+
     const workspaceUrl = `https://${podId}.runpod.net`
 
     // 5️⃣ Update Supabase with pod + volume
     const { error: updateError } = await supabase
       .from("orders")
       .update({
-        status: podReady ? "running" : "pending",
+        status: "running",
         pod_id: podId,
         volume_id: volumeId,
         workspace_url: workspaceUrl,
