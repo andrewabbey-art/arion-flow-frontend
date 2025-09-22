@@ -14,6 +14,10 @@ function normalizeGpuType(input?: string): string {
   const trimmed = input.trim()
 
   const map: Record<string, string> = {
+    // ✅ Added: Budget
+    "Budget — RTX A4000 (16GB)": "NVIDIA RTX A4000",
+    "RTX A4000": "NVIDIA RTX A4000",
+
     // Starter
     "Starter — RTX 3090 / L4 (24GB)": "NVIDIA GeForce RTX 3090",
     "RTX 3090": "NVIDIA GeForce RTX 3090",

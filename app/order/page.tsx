@@ -18,6 +18,8 @@ function generateName() {
 
 // ✅ static GPU list (simplified curated options)
 const gpuOptions = [
+  // ✅ Added: A4000 as Budget tier
+  { id: "RTX A4000", label: "Budget — RTX A4000 (16GB)", disabled: false }, 
   { id: "RTX 3090", label: "Starter — RTX 3090 / L4 (24GB)", disabled: false },
   { id: "RTX 4090", label: "Creator — RTX 4090 / L40S (24–48GB)", disabled: false },
   { id: "A40", label: "Studio — A40 / A6000 / RTX 6000 Ada (48GB)", disabled: false },
@@ -110,7 +112,7 @@ export default function OrderPage() {
               onChange={(e) => setDatacenter(e.target.value)}
               className={selectStyles}
             >
-              {/* ✅ Added: limit regions to network-volume supported only */}
+              {/* limit regions to network-volume supported only */}
               <option value="EUR-IS-1">Europe (Iceland)</option>
               <option value="EU-RO-1">Europe (Romania)</option>
               <option value="EU-CZ-1">Europe (Czech Republic)</option>
