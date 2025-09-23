@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
 
-  // ✅ Load user profile and check authorization
+  // ✅ Load user profile and check authorisation
   useEffect(() => {
     async function checkAuth() {
       const { data: { user } } = await supabase.auth.getUser();
