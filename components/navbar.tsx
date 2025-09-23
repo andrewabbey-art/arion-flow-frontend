@@ -9,7 +9,7 @@ import Image from "next/image"
 interface Profile {
   first_name: string
   last_name: string
-  role?: string | null // ✅ Added role
+  role?: string | null
 }
 
 export default function NavBar() {
@@ -18,15 +18,18 @@ export default function NavBar() {
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadUser() {
+      setLoading(true)
       const {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) {
         setProfile(null)
         setUserEmail(null)
+        setLoading(false)
         return
       }
 
@@ -34,7 +37,7 @@ export default function NavBar() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("first_name, last_name, role") // ✅ include role
+        .select("first_name, last_name, role")
         .eq("id", user.id)
         .single()
 
@@ -43,6 +46,8 @@ export default function NavBar() {
       } else {
         setProfile(null)
       }
+
+      setLoading(false)
     }
 
     loadUser()
@@ -76,7 +81,9 @@ export default function NavBar() {
       </Link>
 
       <div className="flex items-center gap-4">
-        {profile || userEmail ? (
+        {loading ? (
+          <span className="text-sm text-muted-foreground">Loading...</span>
+        ) : profile || userEmail ? (
           <>
             <span className="text-sm text-muted-foreground">
               Welcome,{" "}
@@ -99,7 +106,7 @@ export default function NavBar() {
               My Account
             </Link>
 
-            {/* ✅ Only show for arion_admins */}
+            {/* ✅ Only visible for Arion Admins */}
             {profile?.role === "arion_admin" && (
               <Link
                 href="/admin/accounts"

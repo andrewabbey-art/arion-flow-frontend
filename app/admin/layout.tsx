@@ -9,23 +9,33 @@ export default async function AdminLayout({
 }) {
   const supabase = createServerComponentClient({ cookies })
 
+  // Get session
   const {
     data: { session },
   } = await supabase.auth.getSession()
 
+  // Not logged in → login page
   if (!session?.user) {
     redirect("/login")
   }
 
-  const { data: profile } = await supabase
+  // Get profile
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("role, authorized")
     .eq("id", session.user.id)
     .single()
 
-  if (!profile?.authorized || profile.role !== "arion_admin") {
-    redirect("/") // or show an access denied page
+  // If profile missing or query error → deny
+  if (error || !profile) {
+    redirect("/admin/denied")
   }
 
+  // If not authorized or not admin → deny
+  if (!profile.authorized || profile.role !== "arion_admin") {
+    redirect("/admin/denied")
+  }
+
+  // ✅ Authorized admin → allow children
   return <>{children}</>
 }
