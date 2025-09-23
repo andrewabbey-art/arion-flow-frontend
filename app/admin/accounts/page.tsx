@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Trash2, UserPlus } from "lucide-react"
+import { Label } from "@/components/ui/label"
 
 interface Role {
   key: string
@@ -33,6 +34,8 @@ interface Profile {
   email: string
   first_name: string
   last_name: string
+  job_title: string | null
+  phone: string | null
   is_active: boolean
   email_verified: boolean
   authorized: boolean
@@ -46,18 +49,18 @@ export default function AccountManagementPage() {
   const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
 
-  // New user modal state
   const [openAdd, setOpenAdd] = useState(false)
   const [newEmail, setNewEmail] = useState("")
   const [newRole, setNewRole] = useState("workspace_user")
+  const [newFirstName, setNewFirstName] = useState("")
+  const [newLastName, setNewLastName] = useState("")
+  const [newJobTitle, setNewJobTitle] = useState("")
+  const [newPhone, setNewPhone] = useState("")
+  const [newAuthorized, setNewAuthorized] = useState(false)
 
   async function fetchUsers() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(
-        "id, email, first_name, last_name, is_active, email_verified, authorized, last_login, role"
-      )
+    const { data, error } = await supabase.from("profiles").select("*")
     if (!error && data) {
       setUsers(data as Profile[])
     }
@@ -65,13 +68,14 @@ export default function AccountManagementPage() {
   }
 
   async function fetchRoles() {
-    const { data, error } = await supabase.from("roles").select("key, description")
+    const { data, error } = await supabase
+      .from("roles")
+      .select("key, description")
     if (!error && data) {
       setRoles(data as Role[])
     }
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchUsers()
     fetchRoles()
@@ -98,14 +102,47 @@ export default function AccountManagementPage() {
     }
   }
 
+  // ✅ Updated addUser function
   async function addUser() {
-    await supabase
-      .from("profiles")
-      .insert([{ email: newEmail, is_active: false, email_verified: false, authorized: false, role: newRole }])
-    setNewEmail("")
-    setNewRole("workspace_user")
-    setOpenAdd(false)
-    fetchUsers()
+    if (!newEmail) {
+      alert("Email is required.")
+      return
+    }
+
+    try {
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: newEmail,
+          first_name: newFirstName,
+          last_name: newLastName,
+          job_title: newJobTitle,
+          phone: newPhone,
+          role: newRole,
+          authorized: newAuthorized,
+        }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error || "An unknown error occurred.")
+      }
+
+      alert("Invitation sent successfully!")
+    } catch (err: any) {
+      alert(`Error inviting user: ${err.message}`)
+    } finally {
+      setNewEmail("")
+      setNewFirstName("")
+      setNewLastName("")
+      setNewJobTitle("")
+      setNewPhone("")
+      setNewAuthorized(false)
+      setNewRole("workspace_user")
+      setOpenAdd(false)
+      fetchUsers()
+    }
   }
 
   return (
@@ -129,6 +166,28 @@ export default function AccountManagementPage() {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                 />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    placeholder="First Name"
+                    value={newFirstName}
+                    onChange={(e) => setNewFirstName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Last Name"
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                  />
+                </div>
+                <Input
+                  placeholder="Job Title"
+                  value={newJobTitle}
+                  onChange={(e) => setNewJobTitle(e.target.value)}
+                />
+                <Input
+                  placeholder="Phone (Optional)"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                />
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={newRole}
@@ -140,7 +199,17 @@ export default function AccountManagementPage() {
                     </option>
                   ))}
                 </select>
-                <Button onClick={addUser}>Create</Button>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="new-authorized"
+                    checked={newAuthorized}
+                    onCheckedChange={setNewAuthorized}
+                  />
+                  <Label htmlFor="new-authorized">Authorized</Label>
+                </div>
+                <Button onClick={addUser} className="w-full">
+                  Create
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -154,10 +223,9 @@ export default function AccountManagementPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Job Title</TableHead>
                 <TableHead>Authorized</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>Active</TableHead>
-                <TableHead>Verified</TableHead>
                 <TableHead>Last Login</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -169,6 +237,7 @@ export default function AccountManagementPage() {
                     {u.first_name} {u.last_name}
                   </TableCell>
                   <TableCell>{u.email}</TableCell>
+                  <TableCell>{u.job_title || "—"}</TableCell>
                   <TableCell>
                     <Switch
                       checked={u.authorized}
@@ -192,29 +261,17 @@ export default function AccountManagementPage() {
                     </select>
                   </TableCell>
                   <TableCell>
-                    <Switch
-                      checked={u.is_active}
-                      onCheckedChange={(val) =>
-                        toggleField(u.id, "is_active", val)
-                      }
-                    />
+                    {u.last_login
+                      ? new Date(u.last_login).toLocaleString()
+                      : "—"}
                   </TableCell>
                   <TableCell>
-                    <Switch
-                      checked={u.email_verified}
-                      onCheckedChange={(val) =>
-                        toggleField(u.id, "email_verified", val)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>{u.last_login || "—"}</TableCell>
-                  <TableCell className="flex gap-2">
                     <Button
                       size="sm"
                       variant="destructive"
                       onClick={() => deleteUser(u.id)}
                     >
-                      <Trash2 className="h-4 w-4 mr-1" /> Delete
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
