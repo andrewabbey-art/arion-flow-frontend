@@ -1,4 +1,4 @@
-"use client"
+// "use client"
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
@@ -9,6 +9,7 @@ import Image from "next/image"
 interface Profile {
   first_name: string
   last_name: string
+  role?: string | null // ✅ Added role
 }
 
 export default function NavBar() {
@@ -20,7 +21,9 @@ export default function NavBar() {
 
   useEffect(() => {
     async function loadUser() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         setProfile(null)
         setUserEmail(null)
@@ -31,7 +34,7 @@ export default function NavBar() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("first_name, last_name")
+        .select("first_name, last_name, role") // ✅ include role
         .eq("id", user.id)
         .single()
 
@@ -95,6 +98,16 @@ export default function NavBar() {
             >
               My Account
             </Link>
+
+            {/* ✅ Only show for arion_admins */}
+            {profile?.role === "arion_admin" && (
+              <Link
+                href="/admin/accounts"
+                className="px-4 py-2 rounded-lg border border-destructive text-destructive text-sm font-medium hover:bg-destructive/10 transition-colors"
+              >
+                Account Admin
+              </Link>
+            )}
 
             <button
               onClick={handleLogout}

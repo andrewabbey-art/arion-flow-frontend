@@ -21,10 +21,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Trash2, UserPlus, CheckCircle } from "lucide-react"
+import { Trash2, UserPlus } from "lucide-react"
 
-interface RoleRecord {
-  name: string
+interface Role {
+  key: string
+  description: string
 }
 
 interface Profile {
@@ -34,40 +35,46 @@ interface Profile {
   last_name: string
   is_active: boolean
   email_verified: boolean
+  authorized: boolean
   last_login: string | null
-  roles: RoleRecord[] | null
+  role: string | null
 }
 
 export default function AccountManagementPage() {
   const supabase = getSupabaseClient()
   const [users, setUsers] = useState<Profile[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
 
   // New user modal state
   const [openAdd, setOpenAdd] = useState(false)
   const [newEmail, setNewEmail] = useState("")
-  const [newRole, setNewRole] = useState("user")
+  const [newRole, setNewRole] = useState("workspace_user")
 
   async function fetchUsers() {
     setLoading(true)
-    const { data, error } = await supabase.from("profiles").select(`
-      id, email, first_name, last_name, is_active, email_verified, last_login,
-      roles:roles(name)
-    `)
-    if (!error && data) {
-      setUsers(
-        (data as Profile[]).map((u) => ({
-          ...u,
-          roles: u.roles?.map((r) => ({ name: r.name })) || [],
-        }))
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "id, email, first_name, last_name, is_active, email_verified, authorized, last_login, role"
       )
+    if (!error && data) {
+      setUsers(data as Profile[])
     }
     setLoading(false)
+  }
+
+  async function fetchRoles() {
+    const { data, error } = await supabase.from("roles").select("key, description")
+    if (!error && data) {
+      setRoles(data as Role[])
+    }
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchUsers()
+    fetchRoles()
   }, [])
 
   async function toggleField(
@@ -76,6 +83,11 @@ export default function AccountManagementPage() {
     value: boolean
   ) {
     await supabase.from("profiles").update({ [field]: value }).eq("id", userId)
+    fetchUsers()
+  }
+
+  async function updateRole(userId: string, role: string) {
+    await supabase.from("profiles").update({ role }).eq("id", userId)
     fetchUsers()
   }
 
@@ -89,15 +101,9 @@ export default function AccountManagementPage() {
   async function addUser() {
     await supabase
       .from("profiles")
-      .insert([{ email: newEmail, is_active: false, email_verified: false }])
-    if (newRole) {
-      // optional: insert into roles table
-      await supabase
-        .from("roles")
-        .insert([{ user_id: newEmail, role: newRole }])
-    }
+      .insert([{ email: newEmail, is_active: false, email_verified: false, authorized: false, role: newRole }])
     setNewEmail("")
-    setNewRole("user")
+    setNewRole("workspace_user")
     setOpenAdd(false)
     fetchUsers()
   }
@@ -123,11 +129,17 @@ export default function AccountManagementPage() {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                 />
-                <Input
-                  placeholder="Role"
+                <select
+                  className="w-full rounded border px-3 py-2 text-sm"
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value)}
-                />
+                >
+                  {roles.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.key}
+                    </option>
+                  ))}
+                </select>
                 <Button onClick={addUser}>Create</Button>
               </div>
             </DialogContent>
@@ -142,7 +154,8 @@ export default function AccountManagementPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Roles</TableHead>
+                <TableHead>Authorized</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>Active</TableHead>
                 <TableHead>Verified</TableHead>
                 <TableHead>Last Login</TableHead>
@@ -157,7 +170,26 @@ export default function AccountManagementPage() {
                   </TableCell>
                   <TableCell>{u.email}</TableCell>
                   <TableCell>
-                    {u.roles?.map((r) => r.name).join(", ") || "—"}
+                    <Switch
+                      checked={u.authorized}
+                      onCheckedChange={(val) =>
+                        toggleField(u.id, "authorized", val)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <select
+                      className="rounded border px-2 py-1 text-sm"
+                      value={u.role || ""}
+                      onChange={(e) => updateRole(u.id, e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {roles.map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {r.key}
+                        </option>
+                      ))}
+                    </select>
                   </TableCell>
                   <TableCell>
                     <Switch
@@ -177,13 +209,6 @@ export default function AccountManagementPage() {
                   </TableCell>
                   <TableCell>{u.last_login || "—"}</TableCell>
                   <TableCell className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleField(u.id, "is_active", true)}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-1" /> Authorize
-                    </Button>
                     <Button
                       size="sm"
                       variant="destructive"
