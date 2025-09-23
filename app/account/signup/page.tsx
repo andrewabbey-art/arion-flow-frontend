@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 
 import Card from "@/components/card"
 import { getSupabaseClient } from "@/lib/supabaseClient"
+import TerminateModal from "@/components/TerminateModal" // ✅ For styling reference
 
 interface FormData {
   firstName: string
@@ -25,6 +26,47 @@ interface FormErrors {
   general?: string
 }
 
+// ✅ Added: OrgExistsModal
+function OrgExistsModal({
+  isOpen,
+  onClose,
+  onRequestAccess,
+  orgName,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onRequestAccess: () => void
+  orgName: string
+}) {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-background rounded-xl p-6 shadow-lg max-w-md w-full">
+        <h2 className="text-xl font-bold mb-4 text-primary">Organization Already Exists</h2>
+        <p className="text-muted-foreground mb-6">
+          The organization <strong>{orgName}</strong> is already registered. Please contact your
+          administrator to be invited, or request access below.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onRequestAccess}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            Request Access
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SignupPage() {
   const router = useRouter()
   const [formData, setFormData] = useState<FormData>({
@@ -37,6 +79,10 @@ export default function SignupPage() {
   })
   const [errors, setErrors] = useState<FormErrors>({})
   const [isLoading, setIsLoading] = useState(false)
+
+  // ✅ Added state for modal
+  const [showOrgExistsModal, setShowOrgExistsModal] = useState(false)
+  const [conflictingOrg, setConflictingOrg] = useState("")
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -80,6 +126,20 @@ export default function SignupPage() {
         jobTitle: formData.jobTitle.trim(),
       }
 
+      // ✅ Check if organization already exists
+      const { data: existingOrg, error: orgCheckError } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("name", trimmedData.organizationName)
+        .maybeSingle()
+
+      if (orgCheckError) throw new Error(orgCheckError.message)
+      if (existingOrg) {
+        setConflictingOrg(trimmedData.organizationName)
+        setShowOrgExistsModal(true) // ✅ Open modal
+        return
+      }
+
       // 🔐 Register user
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: trimmedData.email,
@@ -90,7 +150,7 @@ export default function SignupPage() {
       const user = signUpData.user
       if (!user) throw new Error("User registration failed.")
 
-      // ✅ Insert profile with authorized = false (handle existing profile gracefully)
+      // ✅ Insert profile
       const profilePayload = {
         id: user.id,
         first_name: trimmedData.firstName,
@@ -164,6 +224,7 @@ export default function SignupPage() {
         </p>
 
         <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+          {/* form fields unchanged */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="firstName" className="text-sm font-medium text-muted-foreground">
@@ -179,7 +240,6 @@ export default function SignupPage() {
               />
               {errors.firstName && <p className="text-sm text-red-400">{errors.firstName}</p>}
             </div>
-
             <div>
               <label htmlFor="lastName" className="text-sm font-medium text-muted-foreground">
                 Last name
@@ -270,6 +330,17 @@ export default function SignupPage() {
           <p className="mt-6 text-center text-sm text-red-400">{errors.general}</p>
         )}
       </Card>
+
+      {/* ✅ OrgExistsModal */}
+      <OrgExistsModal
+        isOpen={showOrgExistsModal}
+        orgName={conflictingOrg}
+        onClose={() => setShowOrgExistsModal(false)}
+        onRequestAccess={() => {
+          setShowOrgExistsModal(false)
+          alert("Access request sent (placeholder).") // Replace with real logic
+        }}
+      />
     </main>
   )
 }
