@@ -5,10 +5,27 @@ import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Trash2, UserPlus, CheckCircle, XCircle } from "lucide-react"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Trash2, UserPlus, CheckCircle } from "lucide-react"
+
+interface RoleRecord {
+  name: string
+}
 
 interface Profile {
   id: string
@@ -18,7 +35,7 @@ interface Profile {
   is_active: boolean
   email_verified: boolean
   last_login: string | null
-  roles: string[]
+  roles: RoleRecord[] | null
 }
 
 export default function AccountManagementPage() {
@@ -31,10 +48,6 @@ export default function AccountManagementPage() {
   const [newEmail, setNewEmail] = useState("")
   const [newRole, setNewRole] = useState("user")
 
-  useEffect(() => {
-    fetchUsers()
-  }, [])
-
   async function fetchUsers() {
     setLoading(true)
     const { data, error } = await supabase.from("profiles").select(`
@@ -43,16 +56,25 @@ export default function AccountManagementPage() {
     `)
     if (!error && data) {
       setUsers(
-        data.map((u: any) => ({
+        (data as Profile[]).map((u) => ({
           ...u,
-          roles: u.roles?.map((r: any) => r.name) || [],
+          roles: u.roles?.map((r) => ({ name: r.name })) || [],
         }))
       )
     }
     setLoading(false)
   }
 
-  async function toggleField(userId: string, field: keyof Profile, value: boolean) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  async function toggleField(
+    userId: string,
+    field: keyof Profile,
+    value: boolean
+  ) {
     await supabase.from("profiles").update({ [field]: value }).eq("id", userId)
     fetchUsers()
   }
@@ -65,12 +87,14 @@ export default function AccountManagementPage() {
   }
 
   async function addUser() {
-    await supabase.from("profiles").insert([
-      { email: newEmail, is_active: false, email_verified: false },
-    ])
+    await supabase
+      .from("profiles")
+      .insert([{ email: newEmail, is_active: false, email_verified: false }])
     if (newRole) {
       // optional: insert into roles table
-      await supabase.from("roles").insert([{ user_id: newEmail, role: newRole }])
+      await supabase
+        .from("roles")
+        .insert([{ user_id: newEmail, role: newRole }])
     }
     setNewEmail("")
     setNewRole("user")
@@ -85,7 +109,9 @@ export default function AccountManagementPage() {
           <h2 className="text-xl font-bold">Account Management</h2>
           <Dialog open={openAdd} onOpenChange={setOpenAdd}>
             <DialogTrigger asChild>
-              <Button><UserPlus className="mr-2 h-4 w-4" /> Add User</Button>
+              <Button>
+                <UserPlus className="mr-2 h-4 w-4" /> Add User
+              </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
@@ -126,19 +152,27 @@ export default function AccountManagementPage() {
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id}>
-                  <TableCell>{u.first_name} {u.last_name}</TableCell>
+                  <TableCell>
+                    {u.first_name} {u.last_name}
+                  </TableCell>
                   <TableCell>{u.email}</TableCell>
-                  <TableCell>{u.roles.join(", ")}</TableCell>
+                  <TableCell>
+                    {u.roles?.map((r) => r.name).join(", ") || "—"}
+                  </TableCell>
                   <TableCell>
                     <Switch
                       checked={u.is_active}
-                      onCheckedChange={(val) => toggleField(u.id, "is_active", val)}
+                      onCheckedChange={(val) =>
+                        toggleField(u.id, "is_active", val)
+                      }
                     />
                   </TableCell>
                   <TableCell>
                     <Switch
                       checked={u.email_verified}
-                      onCheckedChange={(val) => toggleField(u.id, "email_verified", val)}
+                      onCheckedChange={(val) =>
+                        toggleField(u.id, "email_verified", val)
+                      }
                     />
                   </TableCell>
                   <TableCell>{u.last_login || "—"}</TableCell>
