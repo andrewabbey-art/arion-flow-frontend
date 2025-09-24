@@ -1,31 +1,27 @@
-"use client"
+"use client";
 
 type TerminateModalProps = {
-  orderId: string
-  onClose: () => void
-  onConfirm: (deleteWorkspace: boolean) => void | Promise<void>
-}
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (deleteWorkspace: boolean) => void;
+};
 
-export default function TerminateModal({
-  orderId,
-  onClose,
-  onConfirm,
-}: TerminateModalProps) {
+export default function TerminateModal({ open, onClose, onConfirm }: TerminateModalProps) {
+  if (!open) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-card rounded-lg shadow-lg w-full max-w-md p-6">
         <h2 className="text-lg font-semibold mb-4">Terminate Instance</h2>
         <p className="text-sm text-muted-foreground mb-6">
-          Do you want to keep this workspace volume for{" "}
-          <span className="font-mono text-xs">{orderId}</span> so it can be reused
-          later, or delete it permanently?
+          Do you want to keep this workspace volume so it can be reused later, or delete it permanently?
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-end">
           <button
             onClick={() => {
-              onConfirm(false) // keep workspace
-              onClose()
+              onConfirm(false); // keep workspace
+              onClose();
             }}
             className="flex-1 text-center border border-yellow-500/50 text-yellow-600 px-4 py-2 rounded-lg hover:bg-yellow-500/10 transition-colors"
           >
@@ -34,8 +30,8 @@ export default function TerminateModal({
 
           <button
             onClick={() => {
-              onConfirm(true) // delete workspace
-              onClose()
+              onConfirm(true); // delete workspace
+              onClose();
             }}
             className="flex-1 text-center border border-red-500/50 text-red-600 px-4 py-2 rounded-lg hover:bg-red-500/10 transition-colors"
           >
@@ -51,5 +47,5 @@ export default function TerminateModal({
         </div>
       </div>
     </div>
-  )
+  );
 }
