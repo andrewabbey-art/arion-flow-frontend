@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react" // ✅ Added: useMemo
+import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { Session } from "@supabase/supabase-js"
@@ -27,7 +27,7 @@ type Telemetry = {
   gpu_count: number
   gpu_type: string
   uptime_seconds: number
-  gpu_metrics: GpuMetric[]
+  gpu_metrics: GpuMetric[] // This is the field that can be undefined
   container_metrics: ContainerMetrics
   workspace_url: string
 }
@@ -69,11 +69,8 @@ export default function DashboardClient({
     }
   }, [initialOrders])
 
-  // ✅ Corrected: Create a stable dependency based on a string of order IDs.
-  // This value will only change if an order is added or removed, not on every re-render.
   const orderIds = useMemo(() => orders.map((o) => o.id).sort().join(","), [orders])
 
-  // This useEffect fetches telemetry. It now depends on the stable 'orderIds' string.
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -113,13 +110,12 @@ export default function DashboardClient({
     }
 
     const fetchAllTelemetry = () => orders.forEach((o) => fetchTelemetry(o.id))
-    fetchAllTelemetry() // Fetch once immediately
+    fetchAllTelemetry()
     const interval = setInterval(fetchAllTelemetry, 15000)
 
     return () => clearInterval(interval)
-  }, [orderIds]) // ✅ Only re-run when the list of orders changes.
+  }, [orderIds])
 
-  // This useEffect checks workspace status. It also depends on the stable 'orderIds' string.
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -148,11 +144,11 @@ export default function DashboardClient({
     }
 
     const checkAllWorkspaces = () => orders.forEach((o) => checkWorkspaceStatus(o))
-    checkAllWorkspaces() // Check once immediately
+    checkAllWorkspaces()
     const interval = setInterval(checkAllWorkspaces, 10000)
 
     return () => clearInterval(interval)
-  }, [orderIds]) // ✅ Only re-run when the list of orders changes.
+  }, [orderIds])
 
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
@@ -316,19 +312,21 @@ export default function DashboardClient({
                             />
                           </>
                         )}
-                        {order.telemetry.gpu_metrics.map((g, i) => (
-                          <div key={i}>
-                            <hr className="border-border/50 my-3" />
-                            <Metric
-                              label={`GPU ${i + 1} Utilization`}
-                              value={`${g.gpu_util_percent}%`}
-                            />
-                            <Metric
-                              label={`GPU ${i + 1} Memory`}
-                              value={`${g.memory_util_percent}%`}
-                            />
-                          </div>
-                        ))}
+                        {/* ✅ Corrected: Added a check to ensure gpu_metrics is an array before mapping. */}
+                        {Array.isArray(order.telemetry.gpu_metrics) &&
+                          order.telemetry.gpu_metrics.map((g, i) => (
+                            <div key={i}>
+                              <hr className="border-border/50 my-3" />
+                              <Metric
+                                label={`GPU ${i + 1} Utilization`}
+                                value={`${g.gpu_util_percent}%`}
+                              />
+                              <Metric
+                                label={`GPU ${i + 1} Memory`}
+                                value={`${g.memory_util_percent}%`}
+                              />
+                            </div>
+                          ))}
                       </div>
                     )}
                   </div>
