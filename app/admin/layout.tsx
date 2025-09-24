@@ -5,8 +5,8 @@ import type { ReactNode } from "react"
 
 // ✅ Explicit type for the RPC return
 interface UserAccess {
-  authorized: boolean
-  role: string
+  authorized: boolean | null
+  role: string | null
 }
 
 export default async function AdminLayout({
@@ -16,7 +16,6 @@ export default async function AdminLayout({
 }) {
   const supabase = createServerComponentClient({ cookies })
 
-  // Get session
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -25,28 +24,25 @@ export default async function AdminLayout({
     redirect("/login")
   }
 
-  // ✅ Call the RPC and unwrap into a single object
+  // ✅ Typed RPC call with maybeSingle
   const { data: access, error } = await supabase
     .rpc("get_user_access")
     .maybeSingle<UserAccess>()
 
-  if (error || !access?.authorized) {
+  // ✅ Normalize role string
+  const normalizedRole =
+    typeof access?.role === "string" ? access.role.trim().toLowerCase() : null
+
+  const isAllowedRole = normalizedRole
+    ? ["arion_admin", "org_admin"].includes(normalizedRole)
+    : false
+
+  const isAuthorized = Boolean(access?.authorized)
+
+  // ✅ Only allow authorized users with allowed roles
+  if (error || !isAuthorized || !isAllowedRole) {
     redirect("/access-pending")
   }
 
-  // ✅ Role-based gating
-  if (access.role === "arion_admin") {
-    // Global admin → unrestricted
-    return <>{children}</>
-  }
-
-  if (access.role === "org_admin") {
-    // Org admin → restricted view
-    // If you want to show a scoped admin dashboard instead of the same children,
-    // redirect to a separate page:
-    redirect("/admin/org")
-  }
-
-  // All other roles → deny
-  redirect("/access-pending")
+  return <>{children}</>
 }
