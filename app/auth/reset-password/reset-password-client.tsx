@@ -1,23 +1,23 @@
-// app/auth/reset-password/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "@/lib/supabaseClient"
 
-export default function ResetPasswordPage() {
+export default function ResetPasswordClient({
+  accessToken,
+  refreshToken,
+}: {
+  accessToken?: string
+  refreshToken?: string
+}) {
   const supabase = getSupabaseClient()
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  const accessToken = searchParams.get("access_token") || undefined
-  const refreshToken = searchParams.get("refresh_token") || undefined
-
   const [newPassword, setNewPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // Set Supabase session if tokens are present
+    // If Supabase sent a session token, set it
     if (accessToken && refreshToken) {
       supabase.auth.setSession({
         access_token: accessToken,
@@ -27,29 +27,21 @@ export default function ResetPasswordPage() {
   }, [accessToken, refreshToken, supabase])
 
   async function handleReset() {
-    if (!newPassword) return
     setLoading(true)
-
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    })
-
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
     setLoading(false)
 
     if (error) {
       alert(error.message)
     } else {
-      alert("Password updated successfully! Please log in.")
+      alert("Password updated! Please log in.")
       router.push("/login")
     }
   }
 
   return (
-    <div className="max-w-md mx-auto mt-20 space-y-6">
-      <h1 className="text-2xl font-bold text-center">Set a New Password</h1>
-      <p className="text-sm text-muted-foreground text-center">
-        Enter your new password below to complete the reset process.
-      </p>
+    <div className="max-w-md mx-auto mt-20 space-y-4">
+      <h1 className="text-xl font-bold">Set a New Password</h1>
       <input
         type="password"
         value={newPassword}
@@ -60,7 +52,7 @@ export default function ResetPasswordPage() {
       <button
         onClick={handleReset}
         disabled={loading || !newPassword}
-        className="w-full bg-primary text-white px-3 py-2 rounded disabled:opacity-50"
+        className="w-full bg-primary text-white px-3 py-2 rounded disabled:opacity-60"
       >
         {loading ? "Updating…" : "Update Password"}
       </button>
