@@ -29,6 +29,11 @@ interface Role {
   description: string
 }
 
+interface Organization {
+  id: string
+  name: string
+}
+
 interface UserWithOrg {
   id: string
   email: string
@@ -45,9 +50,23 @@ interface UserWithOrg {
   } | null
 }
 
-interface Organization {
+// ✅ Supabase join result type
+interface ProfileRow {
   id: string
-  name: string
+  email: string
+  first_name: string
+  last_name: string
+  job_title: string | null
+  phone: string | null
+  authorized: boolean
+  role: string | null
+  last_login: string | null
+  organization_users?: {
+    organization?: {
+      id: string
+      name: string
+    } | null
+  } | null
 }
 
 export default function AccountManagementPage() {
@@ -91,9 +110,18 @@ export default function AccountManagementPage() {
         )
       `
       )
+
     if (!error && data) {
-      const mapped = (data as any[]).map((u) => ({
-        ...u,
+      const mapped: UserWithOrg[] = (data as ProfileRow[]).map((u) => ({
+        id: u.id,
+        email: u.email,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        job_title: u.job_title,
+        phone: u.phone,
+        authorized: u.authorized,
+        role: u.role,
+        last_login: u.last_login,
         organization: u.organization_users?.organization || null,
       }))
       setUsers(mapped)
@@ -111,7 +139,7 @@ export default function AccountManagementPage() {
     }
   }, [supabase])
 
-  // ✅ fetch organizations
+  // ✅ fetch organizations (no selectedOrgId dep)
   const fetchOrganizations = useCallback(async () => {
     const { data, error } = await supabase
       .from("organizations")
@@ -119,10 +147,10 @@ export default function AccountManagementPage() {
     if (!error && data) {
       setOrganizations(data as Organization[])
       if (data.length > 0 && !selectedOrgId) {
-        setSelectedOrgId(data[0].id)
+        setSelectedOrgId(data[0].id) // default only if none selected
       }
     }
-  }, [supabase, selectedOrgId])
+  }, [supabase]) // ✅ no selectedOrgId dependency
 
   useEffect(() => {
     fetchUsers()
