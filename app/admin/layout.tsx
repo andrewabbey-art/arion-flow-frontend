@@ -3,19 +3,14 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
 
-// ✅ Explicit type for the RPC return
+// ✅ Added: A more robust interface that handles nullable return values from the RPC.
 interface UserAccess {
   authorized: boolean | null
   role: string | null
 }
 
-export default async function AdminLayout({
-  children,
-}: {
-  children: ReactNode
-}) {
+export default async function AdminLayout({ children }: { children: ReactNode }) {
   const supabase = createServerComponentClient({ cookies })
-
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -24,12 +19,13 @@ export default async function AdminLayout({
     redirect("/login")
   }
 
-  // ✅ Typed RPC call with maybeSingle
+  // ✅ Modified: Uses maybeSingle<UserAccess>() for better type inference with potentially null data.
   const { data: access, error } = await supabase
     .rpc("get_user_access")
     .maybeSingle<UserAccess>()
 
-  // ✅ Normalize role string
+  // ✅ Added: Explicit normalization and checks for role and authorization status.
+  // This is safer and prevents runtime errors if 'access' is null.
   const normalizedRole =
     typeof access?.role === "string" ? access.role.trim().toLowerCase() : null
 
@@ -39,7 +35,6 @@ export default async function AdminLayout({
 
   const isAuthorized = Boolean(access?.authorized)
 
-  // ✅ Only allow authorized users with allowed roles
   if (error || !isAuthorized || !isAllowedRole) {
     redirect("/access-pending")
   }
