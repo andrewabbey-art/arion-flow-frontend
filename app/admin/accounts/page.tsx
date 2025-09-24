@@ -44,29 +44,7 @@ interface UserWithOrg {
   authorized: boolean
   last_login: string | null
   role: string | null
-  organization?: {
-    id: string
-    name: string
-  } | null
-}
-
-// ✅ Supabase join result type
-interface ProfileRow {
-  id: string
-  email: string
-  first_name: string
-  last_name: string
-  job_title: string | null
-  phone: string | null
-  authorized: boolean
-  role: string | null
-  last_login: string | null
-  organization_users?: {
-    organization?: {
-      id: string
-      name: string
-    } | null
-  } | null
+  organization_name?: string | null // ✅ Added
 }
 
 export default function AccountManagementPage() {
@@ -87,44 +65,15 @@ export default function AccountManagementPage() {
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
 
-  // ✅ fetch users with organization join
+  // ✅ fetch users from the new view
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
-      .from("profiles")
-      .select(
-        `
-        id,
-        email,
-        first_name,
-        last_name,
-        job_title,
-        phone,
-        authorized,
-        role,
-        last_login,
-        organization_users (
-          organization:organizations (
-            id, name
-          )
-        )
-      `
-      )
+      .from("user_accounts") // ✅ Changed from profiles
+      .select("*")
 
     if (!error && data) {
-      const mapped: UserWithOrg[] = (data as ProfileRow[]).map((u) => ({
-        id: u.id,
-        email: u.email,
-        first_name: u.first_name,
-        last_name: u.last_name,
-        job_title: u.job_title,
-        phone: u.phone,
-        authorized: u.authorized,
-        role: u.role,
-        last_login: u.last_login,
-        organization: u.organization_users?.organization || null,
-      }))
-      setUsers(mapped)
+      setUsers(data as UserWithOrg[])
     }
     setLoading(false)
   }, [supabase])
@@ -335,7 +284,7 @@ export default function AccountManagementPage() {
                     {u.first_name} {u.last_name}
                   </TableCell>
                   <TableCell>{u.email}</TableCell>
-                  <TableCell>{u.organization?.name || "—"}</TableCell>
+                  <TableCell>{u.organization_name || "—"}</TableCell>
                   <TableCell>{u.job_title || "—"}</TableCell>
                   <TableCell>
                     <Switch
