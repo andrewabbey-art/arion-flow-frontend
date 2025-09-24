@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react" // ✅ Added: useMemo
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { Session } from "@supabase/supabase-js"
@@ -50,6 +50,7 @@ interface DashboardClientProps {
 export default function DashboardClient({
   profile,
   initialOrders,
+  session,
 }: DashboardClientProps) {
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -61,13 +62,18 @@ export default function DashboardClient({
 
   useEffect(() => {
     const filtered = initialOrders.filter((o) => o.pod_id !== null)
-    setStatus(
-      filtered.length > 0
-        ? `Displaying ${filtered.length} active workspace(s).`
-        : "No active workspaces found."
-    )
+    if (filtered.length === 0) {
+      setStatus("No active workspaces found.")
+    } else {
+      setStatus(`Displaying ${filtered.length} active workspace(s).`)
+    }
   }, [initialOrders])
 
+  // ✅ Corrected: Create a stable dependency based on a string of order IDs.
+  // This value will only change if an order is added or removed, not on every re-render.
+  const orderIds = useMemo(() => orders.map((o) => o.id).sort().join(","), [orders])
+
+  // This useEffect fetches telemetry. It now depends on the stable 'orderIds' string.
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -79,7 +85,12 @@ export default function DashboardClient({
           setOrders((prev) =>
             prev.map((o) =>
               o.id === orderId
-                ? { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url, error: undefined }
+                ? {
+                    ...o,
+                    telemetry: json.telemetry,
+                    workspace_url: json.telemetry.workspace_url,
+                    error: undefined,
+                  }
                 : o
             )
           )
@@ -101,46 +112,47 @@ export default function DashboardClient({
       }
     }
 
-    orders.forEach((o) => fetchTelemetry(o.id))
-    const interval = setInterval(() => {
-      orders.forEach((o) => fetchTelemetry(o.id))
-    }, 15000)
+    const fetchAllTelemetry = () => orders.forEach((o) => fetchTelemetry(o.id))
+    fetchAllTelemetry() // Fetch once immediately
+    const interval = setInterval(fetchAllTelemetry, 15000)
 
     return () => clearInterval(interval)
-  }, [orders.length, orders])
+  }, [orderIds]) // ✅ Only re-run when the list of orders changes.
 
+  // This useEffect checks workspace status. It also depends on the stable 'orderIds' string.
   useEffect(() => {
-    if (orders.length === 0) return;
+    if (orders.length === 0) return
+
     const checkWorkspaceStatus = async (order: Order) => {
       if (!order.workspace_url) {
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
-        );
-        return;
+        )
+        return
       }
-      const workspaceUrl = order.workspace_url.replace(/\/$/, "");
+
+      const workspaceUrl = order.workspace_url.replace(/\/$/, "")
+
       try {
-        const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(workspaceUrl)}`);
-        const json = await res.json();
-        const ok = json?.status >= 200 && json?.status < 400;
+        const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(workspaceUrl)}`)
+        const json = await res.json()
+        const ok = json?.status >= 200 && json?.status < 400
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o))
-        );
+        )
       } catch {
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
-        );
+        )
       }
-    };
+    }
 
-    orders.forEach((o) => checkWorkspaceStatus(o));
-    const interval = setInterval(() => {
-      orders.forEach((o) => checkWorkspaceStatus(o));
-    }, 10000);
+    const checkAllWorkspaces = () => orders.forEach((o) => checkWorkspaceStatus(o))
+    checkAllWorkspaces() // Check once immediately
+    const interval = setInterval(checkAllWorkspaces, 10000)
 
-    return () => clearInterval(interval);
-  }, [orders]);
-
+    return () => clearInterval(interval)
+  }, [orderIds]) // ✅ Only re-run when the list of orders changes.
 
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
@@ -157,7 +169,6 @@ export default function DashboardClient({
     try {
       setBusyOrderId(orderId)
 
-      // ✅ Modified: The Authorization header is removed as auth is now handled by cookies.
       const hasBody = action === "terminate"
       const body = hasBody ? JSON.stringify({ deleteWorkspace: !!deleteWorkspace }) : undefined
 
@@ -173,7 +184,11 @@ export default function DashboardClient({
       if (!json.ok) throw new Error(json.error || "Unknown error")
 
       if (action === "terminate") {
-        alert(json.deletedWorkspace ? "Pod terminated and workspace deleted." : "Pod terminated, workspace kept.")
+        alert(
+          json.deletedWorkspace
+            ? "Pod terminated and workspace deleted."
+            : "Pod terminated, workspace kept."
+        )
         setOrders((prev) => prev.filter((o) => o.id !== orderId))
       } else {
         alert(`Instance ${action} command sent successfully.`)
@@ -223,12 +238,16 @@ export default function DashboardClient({
               <Card key={order.id} className="p-0 overflow-hidden">
                 <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card/50 border-b border-border">
                   <div>
-                    <h3 className="text-xl font-bold font-heading">Workspace ID #{order.id}</h3>
+                    <h3 className="text-xl font-bold font-heading">
+                      Workspace ID #{order.id}
+                    </h3>
                     <div className="flex flex-col gap-1 mt-2 text-sm">
                       <div className="flex items-center gap-2">
                         <span
                           className={`h-2 w-2 rounded-full ${
-                            order.telemetry?.desired_status === "RUNNING" ? "bg-green-500" : "bg-yellow-500"
+                            order.telemetry?.desired_status === "RUNNING"
+                              ? "bg-green-500"
+                              : "bg-yellow-500"
                           }`}
                         ></span>
                         <span className="text-muted-foreground">
@@ -241,7 +260,9 @@ export default function DashboardClient({
                             wsStatus.pulse ? "animate-pulse" : ""
                           }`}
                         ></span>
-                        <span className="text-muted-foreground">Workspace: {wsStatus.label}</span>
+                        <span className="text-muted-foreground">
+                          Workspace: {wsStatus.label}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -261,25 +282,51 @@ export default function DashboardClient({
                 <div className="p-6 grid md:grid-cols-2 gap-8">
                   <div>
                     <h4 className="font-semibold mb-4 text-foreground">Telemetry</h4>
-                    {order.error && <p className="text-red-400 text-sm">Error: {order.error}</p>}
-                    {!order.error && !order.telemetry && <p className="text-sm text-muted-foreground">Loading telemetry…</p>}
+                    {order.error && (
+                      <p className="text-red-400 text-sm">Error: {order.error}</p>
+                    )}
+                    {!order.error && !order.telemetry && (
+                      <p className="text-sm text-muted-foreground">Loading telemetry…</p>
+                    )}
 
                     {order.telemetry && (
                       <div className="space-y-3">
-                        <Metric label="GPU Type" value={`${order.telemetry.gpu_count}x ${order.telemetry.gpu_type}`} />
-                        <Metric label="Uptime" value={formatUptime(order.telemetry.uptime_seconds)} />
+                        <Metric
+                          label="GPU Type"
+                          value={`${order.telemetry.gpu_count}x ${order.telemetry.gpu_type}`}
+                        />
+                        <Metric
+                          label="Uptime"
+                          value={formatUptime(order.telemetry.uptime_seconds)}
+                        />
                         <hr className="border-border/50 my-3" />
                         {order.telemetry.container_metrics && (
                           <>
-                            <Metric label="CPU Utilization" value={`${order.telemetry.container_metrics.cpu_percent ?? "N/A"}%`} />
-                            <Metric label="RAM Utilization" value={`${order.telemetry.container_metrics.memory_percent ?? "N/A"}%`} />
+                            <Metric
+                              label="CPU Utilization"
+                              value={`${
+                                order.telemetry.container_metrics.cpu_percent ?? "N/A"
+                              }%`}
+                            />
+                            <Metric
+                              label="RAM Utilization"
+                              value={`${
+                                order.telemetry.container_metrics.memory_percent ?? "N/A"
+                              }%`}
+                            />
                           </>
                         )}
                         {order.telemetry.gpu_metrics.map((g, i) => (
                           <div key={i}>
                             <hr className="border-border/50 my-3" />
-                            <Metric label={`GPU ${i + 1} Utilization`} value={`${g.gpu_util_percent}%`} />
-                            <Metric label={`GPU ${i + 1} Memory`} value={`${g.memory_util_percent}%`} />
+                            <Metric
+                              label={`GPU ${i + 1} Utilization`}
+                              value={`${g.gpu_util_percent}%`}
+                            />
+                            <Metric
+                              label={`GPU ${i + 1} Memory`}
+                              value={`${g.memory_util_percent}%`}
+                            />
                           </div>
                         ))}
                       </div>
