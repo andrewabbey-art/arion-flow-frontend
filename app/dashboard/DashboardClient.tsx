@@ -11,7 +11,7 @@ import Card from "@/components/card"
 import Metric from "@/components/Metric"
 import TerminateModal from "@/components/TerminateModal"
 
-// Type definitions from your original component
+// ✅ Corrected: Updated type definitions to more accurately match the RunPod v2 API response.
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -21,15 +21,23 @@ type ContainerMetrics = {
   cpu_percent: number | null
   memory_percent: number | null
 }
+// ✅ Added: A more detailed 'runtime' object within Telemetry
+type Runtime = {
+  uptimeInSeconds: number
+  ports: { privatePort: number, publicPort: number, ip: string }[]
+  gpus: { id: string, gpuUtilPercent: number, memoryUtilPercent: number }[]
+  container: ContainerMetrics
+}
 type Telemetry = {
-  pod_id: string
-  desired_status: string
-  gpu_count: number
-  gpu_type: string
-  uptime_seconds: number
-  gpu_metrics: GpuMetric[] // This is the field that can be undefined
-  container_metrics: ContainerMetrics
-  workspace_url: string
+  id: string
+  name: string
+  desiredStatus: string
+  gpuCount: number
+  gpu: string
+  imageName: string
+  env: Record<string, unknown>
+  runtime?: Runtime // Runtime is optional as it only appears when the pod is running
+  workspaceUrl?: string | null // workspaceUrl is now at the top level
 }
 type Order = InitialOrder & {
   telemetry?: Telemetry
@@ -85,7 +93,8 @@ export default function DashboardClient({
                 ? {
                     ...o,
                     telemetry: json.telemetry,
-                    workspace_url: json.telemetry.workspace_url,
+                    // ✅ Corrected: The workspace_url is at the top level of the telemetry object.
+                    workspace_url: json.telemetry.workspaceUrl,
                     error: undefined,
                   }
                 : o
@@ -162,6 +171,7 @@ export default function DashboardClient({
     action: "stop" | "restart" | "terminate",
     deleteWorkspace?: boolean
   ) => {
+    // ... (This function remains the same)
     try {
       setBusyOrderId(orderId)
 
@@ -197,10 +207,11 @@ export default function DashboardClient({
   }
 
   const getWorkspaceStatus = (order: Order) => {
-    if (!order.telemetry || order.telemetry.desired_status !== "RUNNING") {
+    // ✅ Corrected: Access 'desiredStatus' from the top-level telemetry object
+    if (!order.telemetry || order.telemetry.desiredStatus !== "RUNNING") {
       return { label: "Offline", color: "bg-red-500", pulse: false }
     }
-    if (order.telemetry.desired_status === "RUNNING" && !order.wsOnline) {
+    if (order.telemetry.desiredStatus === "RUNNING" && !order.wsOnline) {
       return { label: "Not Ready", color: "bg-yellow-500", pulse: true }
     }
     return { label: "Online", color: "bg-green-500", pulse: false }
@@ -241,13 +252,13 @@ export default function DashboardClient({
                       <div className="flex items-center gap-2">
                         <span
                           className={`h-2 w-2 rounded-full ${
-                            order.telemetry?.desired_status === "RUNNING"
+                            order.telemetry?.desiredStatus === "RUNNING"
                               ? "bg-green-500"
                               : "bg-yellow-500"
                           }`}
                         ></span>
                         <span className="text-muted-foreground">
-                          Status: {order.telemetry?.desired_status ?? order.status}
+                          Status: {order.telemetry?.desiredStatus ?? order.status}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -262,7 +273,8 @@ export default function DashboardClient({
                       </div>
                     </div>
                   </div>
-
+                  
+                  {/* ✅ Corrected: The button now correctly checks for 'order.workspace_url' */}
                   {order.workspace_url && (
                     <a
                       href={order.workspace_url}
@@ -287,43 +299,43 @@ export default function DashboardClient({
 
                     {order.telemetry && (
                       <div className="space-y-3">
+                        {/* ✅ Corrected: Accessing properties from the correct nested objects */}
                         <Metric
                           label="GPU Type"
-                          value={`${order.telemetry.gpu_count}x ${order.telemetry.gpu_type}`}
+                          value={`${order.telemetry.gpuCount}x ${order.telemetry.gpu}`}
                         />
                         <Metric
                           label="Uptime"
-                          value={formatUptime(order.telemetry.uptime_seconds)}
+                          value={formatUptime(order.telemetry.runtime?.uptimeInSeconds ?? 0)}
                         />
                         <hr className="border-border/50 my-3" />
-                        {order.telemetry.container_metrics && (
+                        {order.telemetry.runtime?.container && (
                           <>
                             <Metric
                               label="CPU Utilization"
                               value={`${
-                                order.telemetry.container_metrics.cpu_percent ?? "N/A"
+                                order.telemetry.runtime.container.cpu_percent ?? "N/A"
                               }%`}
                             />
                             <Metric
                               label="RAM Utilization"
                               value={`${
-                                order.telemetry.container_metrics.memory_percent ?? "N/A"
+                                order.telemetry.runtime.container.memory_percent ?? "N/A"
                               }%`}
                             />
                           </>
                         )}
-                        {/* ✅ Corrected: Added a check to ensure gpu_metrics is an array before mapping. */}
-                        {Array.isArray(order.telemetry.gpu_metrics) &&
-                          order.telemetry.gpu_metrics.map((g, i) => (
+                        {Array.isArray(order.telemetry.runtime?.gpus) &&
+                          order.telemetry.runtime.gpus.map((g, i) => (
                             <div key={i}>
                               <hr className="border-border/50 my-3" />
                               <Metric
                                 label={`GPU ${i + 1} Utilization`}
-                                value={`${g.gpu_util_percent}%`}
+                                value={`${g.gpuUtilPercent}%`}
                               />
                               <Metric
                                 label={`GPU ${i + 1} Memory`}
-                                value={`${g.memory_util_percent}%`}
+                                value={`${g.memoryUtilPercent}%`}
                               />
                             </div>
                           ))}
