@@ -19,20 +19,18 @@ export default async function AdminLayout({
     redirect("/login")
   }
 
-  // Get profile
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role, authorized")
-    .eq("id", session.user.id)
-    .single()
+  // ✅ Added: Fetch both authorized + role in one RPC
+  const { data: access, error } = await supabase.rpc("get_user_access")
 
-  // If profile missing or query error → deny
-  if (error || !profile) {
+  if (error || !access) {
     redirect("/admin/denied")
   }
 
-  // If not authorized or not admin → deny
-  if (!profile.authorized || profile.role !== "arion_admin") {
+  // ✅ If not authorized or not admin → deny
+  if (
+    !access.authorized ||
+    (access.role !== "arion_admin" && access.role !== "org_admin")
+  ) {
     redirect("/admin/denied")
   }
 
