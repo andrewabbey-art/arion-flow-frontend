@@ -8,9 +8,9 @@ import type { Order as InitialOrder } from "./page"
 import Card from "@/components/card"
 import Metric from "@/components/Metric"
 import TerminateModal from "@/components/TerminateModal"
-import { getSupabaseClient } from "@/lib/supabaseClient" // ✅ Use the new singleton client
+import { getSupabaseClient } from "@/lib/supabaseClient" // ✅ Use your original client
 
-// ✅ Corrected: Reverted to the simpler, proven type definitions from your original dashboard.
+// ✅ Reverted to the simpler, proven type definitions from your original dashboard.
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -49,9 +49,8 @@ interface DashboardClientProps {
 export default function DashboardClient({
   profile,
   initialOrders,
-  session,
 }: DashboardClientProps) {
-  const supabase = getSupabaseClient() // ✅ Use the singleton client
+  const supabase = getSupabaseClient()
 
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [status, setStatus] = useState("Loading your orders...")
@@ -69,7 +68,6 @@ export default function DashboardClient({
 
   const orderIds = useMemo(() => orders.map((o) => o.id).sort().join(","), [orders])
 
-  // This useEffect fetches telemetry data.
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -80,20 +78,18 @@ export default function DashboardClient({
         setOrders((prev) =>
           prev.map((o) => {
             if (o.id !== orderId) return o
-            // ✅ Corrected: This logic now merges telemetry data without overwriting the existing order object.
-            // This prevents the workspace_url from disappearing while new data is loading.
+            // ✅ Corrected: This logic now correctly merges telemetry data
+            // without overwriting the existing order object, fixing the flashing button.
             if (json.ok) {
               return { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url, error: undefined }
             } else {
-              return { ...o, error: json.error ?? "Unknown telemetry error", telemetry: o.telemetry } // Preserve old telemetry on error
+              return { ...o, error: json.error ?? "Unknown telemetry error" }
             }
           })
         )
       } catch {
         setOrders((prev) =>
-          prev.map((o) =>
-            o.id === orderId ? { ...o, error: "Telemetry request failed" } : o
-          )
+          prev.map((o) => (o.id === orderId ? { ...o, error: "Telemetry request failed" } : o))
         )
       }
     }
@@ -105,7 +101,6 @@ export default function DashboardClient({
     return () => clearInterval(interval)
   }, [orderIds])
 
-  // This useEffect checks the workspace's online status.
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -152,7 +147,6 @@ export default function DashboardClient({
     action: "stop" | "restart" | "terminate",
     deleteWorkspace?: boolean
   ) => {
-    // This function remains unchanged
     try {
       setBusyOrderId(orderId)
       const hasBody = action === "terminate"
@@ -165,7 +159,11 @@ export default function DashboardClient({
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || "Unknown error")
       if (action === "terminate") {
-        alert(json.deletedWorkspace ? "Pod terminated and workspace deleted." : "Pod terminated, workspace kept.")
+        alert(
+          json.deletedWorkspace
+            ? "Pod terminated and workspace deleted."
+            : "Pod terminated, workspace kept."
+        )
         setOrders((prev) => prev.filter((o) => o.id !== orderId))
       } else {
         alert(`Instance ${action} command sent successfully.`)
