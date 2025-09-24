@@ -1,14 +1,15 @@
-// app/auth/reset-password/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+// ✅ Added 'Suspense' to manage dynamic rendering
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getSupabaseClient } from "@/lib/supabaseClient"
 
-export default function ResetPasswordPage() {
+// ✅ Moved all logic that uses searchParams into a new child component
+function ResetPasswordForm() {
   const supabase = getSupabaseClient()
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const searchParams = useSearchParams() // This hook requires the Suspense boundary
 
   const accessToken = searchParams.get("access_token") || undefined
   const refreshToken = searchParams.get("refresh_token") || undefined
@@ -65,5 +66,14 @@ export default function ResetPasswordPage() {
         {loading ? "Updating…" : "Update Password"}
       </button>
     </div>
+  )
+}
+
+// ✅ The main page component now wraps the dynamic form in Suspense
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="text-center p-8">Loading...</div>}>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }
