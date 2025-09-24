@@ -2,75 +2,84 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+// ✅ Added: A specific type for the request body to replace 'any'
+interface InviteRequestBody {
+  email: string
+  first_name?: string
+  last_name?: string
+  job_title?: string
+  phone?: string
+  role?: string
+  authorized?: boolean
+}
+
 export async function OPTIONS() {
-  return NextResponse.json({ ok: true }, {
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    },
-  })
+  return NextResponse.json(
+    { ok: true },
+    {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers":
+          "authorization, x-client-info, apikey, content-type",
+      },
+    }
+  )
 }
 
 export async function POST(req: Request) {
   try {
-    // ✅ Added: safer JSON parsing
-    let body: any
-    try {
-      body = await req.json()
-    } catch {
-      return NextResponse.json({ error: "Invalid or empty JSON body" }, { status: 400 })
-    }
+    // ✅ Changed: Use the new type and handle potential parsing errors
+    const body: InviteRequestBody = await req.json()
 
-    const {
-      email,
-      first_name,
-      last_name,
-      job_title,
-      phone,
-      role,
-      authorized,
-    } = body // ✅ Added (was inline before)
-
-    if (!email) {
+    if (!body.email) {
       return NextResponse.json({ error: "email is required" }, { status: 400 })
     }
 
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json(
-        { error: "Server misconfigured: missing Supabase env vars" },
-        { status: 500 }
-      )
+    if (
+      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      throw new Error("Server misconfigured: missing Supabase env vars")
     }
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY // server-only secret
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     )
 
-    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      data: {
-        first_name,
-        last_name,
-        job_title,
-        phone,
-        role,
-        authorized,
-      },
-      // redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback`,
-    })
+    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      body.email,
+      {
+        data: {
+          first_name: body.first_name,
+          last_name: body.last_name,
+          job_title: body.job_title,
+          phone: body.phone,
+          role: body.role,
+          authorized: body.authorized,
+        },
+      }
+    )
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
+    if (error) throw error
 
-    return NextResponse.json({ ok: true, data }, {
-      headers: { "Access-Control-Allow-Origin": "*" },
-    })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? "Unknown error" }, {
-      status: 500, // ✅ Added: make sure unexpected errors are treated as server errors
-      headers: { "Access-Control-Allow-Origin": "*" },
-    })
+    return NextResponse.json(
+      { data },
+      {
+        headers: { "Access-Control-Allow-Origin": "*" },
+      }
+    )
+  } catch (error) {
+    // ✅ Changed: Use 'unknown' and type checking for safer error handling
+    const errorMessage =
+      error instanceof Error ? error.message : "An unknown error occurred."
+    return NextResponse.json(
+      { error: errorMessage },
+      {
+        status: 400,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      }
+    )
   }
 }

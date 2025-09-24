@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 
 import Card from "@/components/card"
 import { getSupabaseClient } from "@/lib/supabaseClient"
-import TerminateModal from "@/components/TerminateModal" // ✅ For styling reference
+//import TerminateModal from "@/components/TerminateModal" // ✅ For styling reference
 
 interface FormData {
   firstName: string

@@ -133,8 +133,11 @@ export default function AccountManagementPage() {
       }
 
       alert("Invitation sent successfully!")
-    } catch (err: any) {
-      alert(`Error inviting user: ${err.message}`)
+    } catch (err: unknown) {
+      // ✅ Changed 'any' to 'unknown' for safer error handling
+      const message =
+        err instanceof Error ? err.message : "An unknown error occurred."
+      alert(`Error inviting user: ${message}`)
     } finally {
       setNewEmail("")
       setNewFirstName("")
