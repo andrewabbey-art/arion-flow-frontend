@@ -1,12 +1,12 @@
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs" // ✅ Added: Import the correct helper
+import { cookies } from "next/headers" // ✅ Added: Import cookies
 import { NextRequest, NextResponse } from "next/server"
-import { getSupabaseClient } from "../../../lib/supabaseClient"
 
+// Type definitions and helper functions remain the same
 type NetworkVolumeCreateResponse = { id: string; [k: string]: unknown }
 type PodCreateResponse = { id: string; [k: string]: unknown }
 type PodStatusResponse = { id: string; desiredStatus: string; [k: string]: unknown }
-
 const SUPPORTED_DATACENTERS = ["EUR-IS-1", "EU-RO-1", "EU-CZ-1", "US-KS-2", "US-CA-2"]
-
 function normalizeGpuType(input?: string): string {
   if (!input) return "NVIDIA GeForce RTX 4090"
   const trimmed = input.trim()
@@ -21,27 +21,26 @@ function normalizeGpuType(input?: string): string {
   return map[trimmed] || trimmed
 }
 
+
 export async function POST(req: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    // ✅ Modified: Create an authenticated Supabase client using cookies.
+    // This is the correct way to handle auth in Next.js Route Handlers.
+    const supabase = createRouteHandlerClient({ cookies })
 
-    const authHeader = req.headers.get("authorization")
-    if (!authHeader) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
+    // ✅ Modified: Get the user's session directly from the authenticated client.
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session) {
+      return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
+    }
+    const user = session.user
 
-    const match = authHeader.match(/^Bearer\s+(.+)$/i)
-    const token = match?.[1]?.trim()
-    if (!token) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
-    if (userError || !user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-
-    // ✅ Added: Fetch the user's organization membership.
-    // This is the crucial step to link the order to an organization.
+    // Fetch the user's organization membership.
     const { data: orgUser } = await supabase
       .from("organization_users")
       .select("organization_id")
       .eq("user_id", user.id)
-      .single() // We assume the user belongs to one organization for now.
+      .single()
 
     const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY
     const RUNPOD_REGISTRY_AUTH_ID = process.env.RUNPOD_REGISTRY_AUTH_ID
@@ -54,12 +53,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `Region ${datacenter_id} not supported for network volumes.` }, { status: 400 })
     }
 
-    // ✅ Modified: Insert the organization_id along with the user_id.
+    // ✅ Modified: The insert call is now authenticated and will pass RLS checks.
     const { data: order, error: insertError } = await supabase
       .from("orders")
       .insert({
         user_id: user.id,
-        organization_id: orgUser?.organization_id, // Add the fetched org ID here
+        organization_id: orgUser?.organization_id,
         name,
         datacenter_id,
         storage_gb,
@@ -68,9 +67,14 @@ export async function POST(req: NextRequest) {
       })
       .select()
       .single()
-    if (insertError) throw new Error("Supabase insert error: " + insertError.message)
-    if (!order) throw new Error("Supabase insert returned no row.")
 
+    if (insertError) {
+      // ✅ Added: Provide detailed error logging for RLS failures
+      console.error("Supabase Insert Error:", insertError);
+      throw new Error(`Supabase insert error: ${insertError.message}`);
+    }
+    if (!order) throw new Error("Supabase insert returned no row.")
+    
     // ... (rest of the file remains the same)
     const volResp = await fetch("https://rest.runpod.io/v1/networkvolumes", {
       method: "POST",
@@ -170,6 +174,7 @@ export async function POST(req: NextRequest) {
       workspaceUrl,
       podReady,
     })
+
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error occurred"
     console.error("Provisioning error:", message)

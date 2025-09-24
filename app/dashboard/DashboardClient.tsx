@@ -1,4 +1,4 @@
-"use client" // This must be a Client Component to use hooks like useState and useEffect
+"use client"
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -11,7 +11,7 @@ import Card from "@/components/card"
 import Metric from "@/components/Metric"
 import TerminateModal from "@/components/TerminateModal"
 
-// ✅ Added: All the detailed types from your original file.
+// Type definitions from your original component
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -37,7 +37,6 @@ type Order = InitialOrder & {
   wsOnline?: boolean
 }
 
-// Props passed from the server component
 interface DashboardClientProps {
   profile: {
     id: string
@@ -51,28 +50,24 @@ interface DashboardClientProps {
 export default function DashboardClient({
   profile,
   initialOrders,
-  session,
 }: DashboardClientProps) {
   const router = useRouter()
   const supabase = createClientComponentClient()
 
-  // ✅ Added: All state variables from your original component.
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [status, setStatus] = useState("Loading your orders...")
   const [terminateTarget, setTerminateTarget] = useState<string | null>(null)
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null)
 
-  // ✅ Added: Logic to update status text based on initial orders.
   useEffect(() => {
     const filtered = initialOrders.filter((o) => o.pod_id !== null)
-    if (filtered.length === 0) {
-      setStatus("No active workspaces found.")
-    } else {
-      setStatus(`Displaying ${filtered.length} active workspace(s).`)
-    }
+    setStatus(
+      filtered.length > 0
+        ? `Displaying ${filtered.length} active workspace(s).`
+        : "No active workspaces found."
+    )
   }, [initialOrders])
 
-  // ✅ Added: Your original useEffect for fetching telemetry data.
   useEffect(() => {
     if (orders.length === 0) return
 
@@ -112,45 +107,41 @@ export default function DashboardClient({
     }, 15000)
 
     return () => clearInterval(interval)
-  }, [orders.length]) // This dependency is simplified but effective
+  }, [orders.length, orders])
 
-  // ✅ Added: Your original useEffect for checking workspace online status.
   useEffect(() => {
-    if (orders.length === 0) return
-
+    if (orders.length === 0) return;
     const checkWorkspaceStatus = async (order: Order) => {
       if (!order.workspace_url) {
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
-        )
-        return
+        );
+        return;
       }
-
-      const workspaceUrl = order.workspace_url.replace(/\/$/, "")
-
+      const workspaceUrl = order.workspace_url.replace(/\/$/, "");
       try {
-        const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(workspaceUrl)}`)
-        const json = await res.json()
-        const ok = json?.status >= 200 && json?.status < 400
+        const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(workspaceUrl)}`);
+        const json = await res.json();
+        const ok = json?.status >= 200 && json?.status < 400;
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o))
-        )
+        );
       } catch {
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
-        )
+        );
       }
-    }
+    };
 
-    orders.forEach((o) => checkWorkspaceStatus(o))
+    orders.forEach((o) => checkWorkspaceStatus(o));
     const interval = setInterval(() => {
-      orders.forEach((o) => checkWorkspaceStatus(o))
-    }, 10000)
+      orders.forEach((o) => checkWorkspaceStatus(o));
+    }, 10000);
 
-    return () => clearInterval(interval)
-  }, [orders]) // Reruns when orders array is updated
+    return () => clearInterval(interval);
+  }, [orders]);
 
-  // ✅ Added: All helper and action functions from your original component.
+
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
     const hrs = Math.floor(mins / 60)
@@ -166,9 +157,7 @@ export default function DashboardClient({
     try {
       setBusyOrderId(orderId)
 
-      const accessToken = session?.access_token
-      if (!accessToken) throw new Error("No access token")
-
+      // ✅ Modified: The Authorization header is removed as auth is now handled by cookies.
       const hasBody = action === "terminate"
       const body = hasBody ? JSON.stringify({ deleteWorkspace: !!deleteWorkspace }) : undefined
 
@@ -176,7 +165,6 @@ export default function DashboardClient({
         method: "POST",
         headers: {
           ...(hasBody ? { "Content-Type": "application/json" } : {}),
-          Authorization: `Bearer ${accessToken}`,
         },
         body,
       })
@@ -207,7 +195,6 @@ export default function DashboardClient({
     return { label: "Online", color: "bg-green-500", pulse: false }
   }
 
-  // ✅ Added: Your original JSX layout, now using props for initial data.
   return (
     <main className="min-h-screen w-full pt-24">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
