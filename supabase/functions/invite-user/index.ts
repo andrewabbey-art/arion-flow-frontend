@@ -1,17 +1,5 @@
-// app/api/invite/route.ts (Next.js App Router, Vercel)
-
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
-
-export async function OPTIONS() {
-  return NextResponse.json({ ok: true }, {
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    },
-  })
-}
 
 export async function POST(req: Request) {
   try {
@@ -38,13 +26,20 @@ export async function POST(req: Request) {
 
     if (error) throw error
 
-    return NextResponse.json({ data }, {
-      headers: { "Access-Control-Allow-Origin": "*" },
-    })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, {
-      status: 400,
-      headers: { "Access-Control-Allow-Origin": "*" },
-    })
+    return NextResponse.json(
+      { data },
+      {
+        headers: { "Access-Control-Allow-Origin": "*" },
+      }
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error"
+    return NextResponse.json(
+      { error: message },
+      {
+        status: 400,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      }
+    )
   }
 }
