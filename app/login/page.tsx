@@ -23,9 +23,8 @@ export default function LoginPage() {
     if (error) {
       setError(error.message)
     } else {
-      // On successful login, redirect to the admin page.
-      // The auth cookie is now set, so the AdminLayout will let you in.
-      router.push("/admin")
+      // ✅ Redirect to accounts admin page after successful login
+      router.push("/admin/accounts")
       router.refresh() // Refresh to ensure server-side components re-render
     }
   }
