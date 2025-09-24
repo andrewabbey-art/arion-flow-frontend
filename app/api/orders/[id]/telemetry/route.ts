@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
 
 type OrderRow = {
   id: string
@@ -14,36 +15,45 @@ export async function GET(
   const { id: orderId } = context.params
 
   try {
-    // ✅ Use service role key so we bypass RLS safely on the server
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    // ✅ Supabase client bound to the logged-in user session
+    const supabase = createRouteHandlerClient({ cookies })
 
+    // ✅ Ensure session is valid
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+
+    if (sessionError || !session) {
+      return NextResponse.json(
+        { ok: false, error: "Not authenticated" },
+        { status: 401 }
+      )
+    }
+
+    // ✅ Query orders as the logged-in user
     const { data: order, error } = await supabase
       .from("orders")
       .select("id, pod_id, volume_id")
       .eq("id", orderId)
-      .single()
+      .single() // may throw 406 if row is not visible under RLS
 
-    const typedOrder = order as OrderRow | null
-
-    if (error || !typedOrder) {
+    if (error || !order) {
       return NextResponse.json(
-        { ok: false, error: "Order not found or missing pod_id" },
+        { ok: false, error: "Order not found or not accessible" },
         { status: 404 }
       )
     }
 
-    const { pod_id: podId } = typedOrder
-    if (!podId) {
+    const typedOrder = order as OrderRow
+    if (!typedOrder.pod_id) {
       return NextResponse.json(
         { ok: false, error: "Order has no pod_id" },
         { status: 400 }
       )
     }
 
-    // ✅ Example telemetry fetch – replace with your real RunPod / system call
+    // ✅ Placeholder telemetry (replace with RunPod API if needed)
     const telemetry = {
       runtime_status: "running",
       uptime_seconds: 1234,
