@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-// ✅ Added: A specific type for the request body to replace 'any'
+// ✅ Extended type to include org info
 interface InviteRequestBody {
   email: string
   first_name?: string
@@ -11,6 +11,8 @@ interface InviteRequestBody {
   phone?: string
   role?: string
   authorized?: boolean
+  organization_id?: string
+  org_role?: string
 }
 
 export async function OPTIONS() {
@@ -29,7 +31,6 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // ✅ Changed: Use the new type and handle potential parsing errors
     const body: InviteRequestBody = await req.json()
 
     if (!body.email) {
@@ -58,6 +59,8 @@ export async function POST(req: Request) {
           phone: body.phone,
           role: body.role,
           authorized: body.authorized,
+          organization_id: body.organization_id, // ✅ added
+          org_role: body.org_role || "member",   // ✅ default
         },
       }
     )
@@ -71,7 +74,6 @@ export async function POST(req: Request) {
       }
     )
   } catch (error) {
-    // ✅ Changed: Use 'unknown' and type checking for safer error handling
     const errorMessage =
       error instanceof Error ? error.message : "An unknown error occurred."
     return NextResponse.json(

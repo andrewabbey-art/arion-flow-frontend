@@ -1,6 +1,5 @@
 "use client"
 
-// ✅ Added useCallback to correctly handle effects
 import { useEffect, useState, useCallback } from "react"
 import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -30,24 +29,33 @@ interface Role {
   description: string
 }
 
-interface Profile {
+interface UserWithOrg {
   id: string
   email: string
   first_name: string
   last_name: string
   job_title: string | null
   phone: string | null
-  is_active: boolean
-  email_verified: boolean
   authorized: boolean
   last_login: string | null
   role: string | null
+  organization?: {
+    id: string
+    name: string
+  } | null
+}
+
+interface Organization {
+  id: string
+  name: string
 }
 
 export default function AccountManagementPage() {
   const supabase = getSupabaseClient()
-  const [users, setUsers] = useState<Profile[]>([])
+  const [users, setUsers] = useState<UserWithOrg[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+
   const [loading, setLoading] = useState(true)
 
   const [openAdd, setOpenAdd] = useState(false)
@@ -58,18 +66,42 @@ export default function AccountManagementPage() {
   const [newJobTitle, setNewJobTitle] = useState("")
   const [newPhone, setNewPhone] = useState("")
   const [newAuthorized, setNewAuthorized] = useState(false)
+  const [selectedOrgId, setSelectedOrgId] = useState("")
 
-  // ✅ Wrapped fetchUsers in useCallback to prevent it from being recreated on every render
+  // ✅ fetch users with organization join
   const fetchUsers = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase.from("profiles").select("*")
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        `
+        id,
+        email,
+        first_name,
+        last_name,
+        job_title,
+        phone,
+        authorized,
+        role,
+        last_login,
+        organization_users (
+          organization:organizations (
+            id, name
+          )
+        )
+      `
+      )
     if (!error && data) {
-      setUsers(data as Profile[])
+      const mapped = (data as any[]).map((u) => ({
+        ...u,
+        organization: u.organization_users?.organization || null,
+      }))
+      setUsers(mapped)
     }
     setLoading(false)
   }, [supabase])
 
-  // ✅ Wrapped fetchRoles in useCallback for the same reason
+  // ✅ fetch roles
   const fetchRoles = useCallback(async () => {
     const { data, error } = await supabase
       .from("roles")
@@ -79,15 +111,28 @@ export default function AccountManagementPage() {
     }
   }, [supabase])
 
-  // ✅ Added the stable functions to the dependency array to follow React best practices
+  // ✅ fetch organizations
+  const fetchOrganizations = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("organizations")
+      .select("id, name")
+    if (!error && data) {
+      setOrganizations(data as Organization[])
+      if (data.length > 0 && !selectedOrgId) {
+        setSelectedOrgId(data[0].id)
+      }
+    }
+  }, [supabase, selectedOrgId])
+
   useEffect(() => {
     fetchUsers()
     fetchRoles()
-  }, [fetchUsers, fetchRoles])
+    fetchOrganizations()
+  }, [fetchUsers, fetchRoles, fetchOrganizations])
 
   async function toggleField(
     userId: string,
-    field: keyof Profile,
+    field: keyof UserWithOrg,
     value: boolean
   ) {
     await supabase.from("profiles").update({ [field]: value }).eq("id", userId)
@@ -124,6 +169,8 @@ export default function AccountManagementPage() {
           phone: newPhone,
           role: newRole,
           authorized: newAuthorized,
+          organization_id: selectedOrgId,
+          org_role: newRole === "arion_admin" ? "admin" : "member",
         }),
       })
 
@@ -134,7 +181,6 @@ export default function AccountManagementPage() {
 
       alert("Invitation sent successfully!")
     } catch (err: unknown) {
-      // ✅ Changed 'any' to 'unknown' for safer error handling
       const message =
         err instanceof Error ? err.message : "An unknown error occurred."
       alert(`Error inviting user: ${message}`)
@@ -194,6 +240,21 @@ export default function AccountManagementPage() {
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
                 />
+
+                {/* ✅ Organization dropdown */}
+                <select
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  value={selectedOrgId}
+                  onChange={(e) => setSelectedOrgId(e.target.value)}
+                >
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Role dropdown */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={newRole}
@@ -205,6 +266,7 @@ export default function AccountManagementPage() {
                     </option>
                   ))}
                 </select>
+
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="new-authorized"
@@ -213,6 +275,7 @@ export default function AccountManagementPage() {
                   />
                   <Label htmlFor="new-authorized">Authorized</Label>
                 </div>
+
                 <Button onClick={addUser} className="w-full">
                   Create
                 </Button>
@@ -229,6 +292,7 @@ export default function AccountManagementPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Organization</TableHead>
                 <TableHead>Job Title</TableHead>
                 <TableHead>Authorized</TableHead>
                 <TableHead>Role</TableHead>
@@ -243,6 +307,7 @@ export default function AccountManagementPage() {
                     {u.first_name} {u.last_name}
                   </TableCell>
                   <TableCell>{u.email}</TableCell>
+                  <TableCell>{u.organization?.name || "—"}</TableCell>
                   <TableCell>{u.job_title || "—"}</TableCell>
                   <TableCell>
                     <Switch
