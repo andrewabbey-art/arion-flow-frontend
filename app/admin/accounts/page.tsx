@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+// ✅ Added useCallback to correctly handle effects
+import { useEffect, useState, useCallback } from "react"
 import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -58,28 +59,31 @@ export default function AccountManagementPage() {
   const [newPhone, setNewPhone] = useState("")
   const [newAuthorized, setNewAuthorized] = useState(false)
 
-  async function fetchUsers() {
+  // ✅ Wrapped fetchUsers in useCallback to prevent it from being recreated on every render
+  const fetchUsers = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase.from("profiles").select("*")
     if (!error && data) {
       setUsers(data as Profile[])
     }
     setLoading(false)
-  }
+  }, [supabase])
 
-  async function fetchRoles() {
+  // ✅ Wrapped fetchRoles in useCallback for the same reason
+  const fetchRoles = useCallback(async () => {
     const { data, error } = await supabase
       .from("roles")
       .select("key, description")
     if (!error && data) {
       setRoles(data as Role[])
     }
-  }
+  }, [supabase])
 
+  // ✅ Added the stable functions to the dependency array to follow React best practices
   useEffect(() => {
     fetchUsers()
     fetchRoles()
-  }, [])
+  }, [fetchUsers, fetchRoles])
 
   async function toggleField(
     userId: string,
@@ -102,7 +106,6 @@ export default function AccountManagementPage() {
     }
   }
 
-  // ✅ Updated addUser function
   async function addUser() {
     if (!newEmail) {
       alert("Email is required.")
