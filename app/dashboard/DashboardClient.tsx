@@ -8,9 +8,9 @@ import type { Order as InitialOrder } from "./page"
 import Card from "@/components/card"
 import Metric from "@/components/Metric"
 import TerminateModal from "@/components/TerminateModal"
-import { getSupabaseClient } from "@/lib/supabaseClient" // ✅ Use your original client
+import { getSupabaseClient } from "@/lib/supabaseClient"
 
-// ✅ Reverted to the simpler, proven type definitions from your original dashboard.
+// Type definitions from your original component
 type GpuMetric = {
   id: string
   gpu_util_percent: number
@@ -37,10 +37,7 @@ type Order = InitialOrder & {
 }
 
 interface DashboardClientProps {
-  profile: {
-    id: string
-    first_name: string | null
-  }
+  profile: { first_name: string | null }
   organization: { name: string } | null
   initialOrders: InitialOrder[]
   session: Session
@@ -59,11 +56,11 @@ export default function DashboardClient({
 
   useEffect(() => {
     const filtered = initialOrders.filter((o) => o.pod_id !== null)
-    if (filtered.length === 0) {
-      setStatus("No active workspaces found.")
-    } else {
-      setStatus(`Displaying ${filtered.length} active workspace(s).`)
-    }
+    setStatus(
+      filtered.length > 0
+        ? `Displaying ${filtered.length} active workspace(s).`
+        : "No active workspaces found."
+    )
   }, [initialOrders])
 
   const orderIds = useMemo(() => orders.map((o) => o.id).sort().join(","), [orders])
@@ -78,16 +75,14 @@ export default function DashboardClient({
         setOrders((prev) =>
           prev.map((o) => {
             if (o.id !== orderId) return o
-            // ✅ Corrected: This logic now correctly merges telemetry data
-            // without overwriting the existing order object, fixing the flashing button.
             if (json.ok) {
               return { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url, error: undefined }
             } else {
-              return { ...o, error: json.error ?? "Unknown telemetry error" }
+              return { ...o, error: json.error ?? "Unknown telemetry error", telemetry: o.telemetry } 
             }
           })
         )
-      } catch {
+      } catch (err) {
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? { ...o, error: "Telemetry request failed" } : o))
         )
@@ -106,25 +101,17 @@ export default function DashboardClient({
 
     const checkWorkspaceStatus = async (order: Order) => {
       if (!order.workspace_url) {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
-        )
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o)))
         return
       }
-
       const workspaceUrl = order.workspace_url.replace(/\/$/, "")
-
       try {
         const res = await fetch(`/api/check-workspace?url=${encodeURIComponent(workspaceUrl)}`)
         const json = await res.json()
         const ok = json?.status >= 200 && json?.status < 400
-        setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o))
-        )
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, wsOnline: ok } : o)))
       } catch {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o))
-        )
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, wsOnline: false } : o)))
       }
     }
 
@@ -134,6 +121,7 @@ export default function DashboardClient({
 
     return () => clearInterval(interval)
   }, [orderIds])
+
 
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
@@ -159,11 +147,7 @@ export default function DashboardClient({
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || "Unknown error")
       if (action === "terminate") {
-        alert(
-          json.deletedWorkspace
-            ? "Pod terminated and workspace deleted."
-            : "Pod terminated, workspace kept."
-        )
+        alert(json.deletedWorkspace ? "Pod terminated and workspace deleted." : "Pod terminated, workspace kept.")
         setOrders((prev) => prev.filter((o) => o.id !== orderId))
       } else {
         alert(`Instance ${action} command sent successfully.`)
@@ -214,7 +198,8 @@ export default function DashboardClient({
                 <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card/50 border-b border-border">
                   <div>
                     <h3 className="text-xl font-bold font-heading">
-                      Workspace ID #{order.id}
+                      {/* ✅ This line uses the 'name' property, which will now be available */}
+                      {order.name || `Workspace ID #${order.id}`}
                     </h3>
                     <div className="flex flex-col gap-1 mt-2 text-sm">
                       <div className="flex items-center gap-2">
@@ -257,7 +242,7 @@ export default function DashboardClient({
                     {!order.error && !order.telemetry && (<p className="text-sm text-muted-foreground">Loading telemetry…</p>)}
                     {order.telemetry && (
                       <div className="space-y-3">
-                        <Metric label="GPU Type" value={`${order.telemetry.gpu_count}x ${order.telemetry.gpu_type}`} />
+                        <Metric label="GPU Type" value={order.telemetry.gpu_type ? `${order.telemetry.gpu_count}x ${order.telemetry.gpu_type}`: order.gpu_type} />
                         <Metric label="Uptime" value={formatUptime(order.telemetry.uptime_seconds)} />
                         <hr className="border-border/50 my-3" />
                         {order.telemetry.container_metrics && (

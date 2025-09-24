@@ -10,7 +10,6 @@ interface Profile {
   role: string | null
   organization_id: string | null
   first_name: string | null
-  last_name: string | null
 }
 
 interface Organization {
@@ -23,57 +22,44 @@ export interface Order {
   status: string
   workspace_url: string | null
   pod_id: string | null
-  // ✅ Removed `user_id` from the type definition to match the query
+  gpu_type: string
+  name: string | null // ✅ Added: Include 'name' in the type definition.
 }
 
-// This remains a Server Component for security and initial data fetching.
 export default async function Dashboard() {
   const supabase = createServerComponentClient({ cookies: () => cookies() })
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) redirect("/login")
 
-  if (!session) {
-    redirect("/login")
-  }
-
-  // Step 1: Fetch the user's profile.
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, authorized, role, organization_id, first_name")
     .eq("id", session.user.id)
     .single<Profile>()
 
-  if (profileError || !profile) {
+  if (profileError || !profile || profile.authorized !== true) {
     redirect("/access-pending")
   }
 
-  // Step 2: Authorization Check.
-  if (profile.authorized !== true) {
-    redirect("/access-pending")
-  }
-
-  // Step 3: Conditionally fetch the organization.
   let organization: Organization | null = null
   if (profile.organization_id) {
     const { data: orgData } = await supabase
       .from("organizations")
-      .select("*")
+      .select("id, name")
       .eq("id", profile.organization_id)
       .single<Organization>()
     organization = orgData
   }
 
-  // Step 4: Fetch the user's initial orders.
+  // ✅ Modified: Added `name` to the select query.
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, status, workspace_url, pod_id") // This query now matches the Order type
+    .select("id, status, workspace_url, pod_id, gpu_type, name")
     .eq("user_id", session.user.id)
     .neq("status", "deleted")
     .order("created_at", { ascending: false })
 
-  // Step 5: Pass all fetched data to the client component for rendering.
   return (
     <DashboardClient
       profile={profile}
