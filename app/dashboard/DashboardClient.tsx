@@ -1,15 +1,14 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
 import type { Session } from "@supabase/supabase-js"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 import type { Order as InitialOrder } from "./page"
 import Card from "@/components/card"
 import Metric from "@/components/Metric"
 import TerminateModal from "@/components/TerminateModal"
+import { getSupabaseClient } from "@/lib/supabaseClient" // ✅ Use the singleton client
 
 // ✅ Corrected: Reverted to the simpler, proven type definitions from your original dashboard.
 type GpuMetric = {
@@ -52,8 +51,7 @@ export default function DashboardClient({
   initialOrders,
   session,
 }: DashboardClientProps) {
-  const router = useRouter()
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseClient() // ✅ Use the singleton client
 
   const [orders, setOrders] = useState<Order[]>(initialOrders)
   const [status, setStatus] = useState("Loading your orders...")
@@ -78,29 +76,18 @@ export default function DashboardClient({
       try {
         const res = await fetch(`/api/orders/${orderId}/telemetry`)
         const json = await res.json()
-        if (json.ok) {
-          setOrders((prev) =>
-            prev.map((o) =>
-              o.id === orderId
-                ? {
-                    ...o,
-                    telemetry: json.telemetry,
-                    // ✅ Corrected: This ensures the workspace_url from telemetry is always updated.
-                    workspace_url: json.telemetry.workspace_url,
-                    error: undefined,
-                  }
-                : o
-            )
-          )
-        } else {
-          setOrders((prev) =>
-            prev.map((o) =>
-              o.id === orderId
-                ? { ...o, error: json.error ?? "Unknown telemetry error", telemetry: undefined }
-                : o
-            )
-          )
-        }
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id !== orderId) return o
+            // ✅ Corrected: This logic now merges telemetry data without overwriting the existing order object.
+            // This prevents the workspace_url from disappearing.
+            if (json.ok) {
+              return { ...o, telemetry: json.telemetry, workspace_url: json.telemetry.workspace_url, error: undefined }
+            } else {
+              return { ...o, error: json.error ?? "Unknown telemetry error", telemetry: undefined }
+            }
+          })
+        )
       } catch {
         setOrders((prev) =>
           prev.map((o) =>
@@ -151,6 +138,7 @@ export default function DashboardClient({
     return () => clearInterval(interval)
   }, [orderIds])
 
+
   const formatUptime = (secs: number) => {
     const mins = Math.floor(secs / 60)
     const hrs = Math.floor(mins / 60)
@@ -163,6 +151,7 @@ export default function DashboardClient({
     action: "stop" | "restart" | "terminate",
     deleteWorkspace?: boolean
   ) => {
+    // ... (This function remains unchanged)
     try {
       setBusyOrderId(orderId)
 
@@ -288,7 +277,6 @@ export default function DashboardClient({
 
                     {order.telemetry && (
                       <div className="space-y-3">
-                        {/* ✅ Corrected: All telemetry data is now accessed using the simple, original structure. */}
                         <Metric
                           label="GPU Type"
                           value={`${order.telemetry.gpu_count}x ${order.telemetry.gpu_type}`}

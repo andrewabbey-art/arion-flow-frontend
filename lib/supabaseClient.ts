@@ -1,17 +1,19 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
 
-let supabase: SupabaseClient | null = null
+// ✅ Added: Create a singleton instance of the Supabase client.
+let client: ReturnType<typeof createBrowserClient> | undefined = undefined;
 
-export function getSupabaseClient(): SupabaseClient {
-  if (!supabase) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!url || !key) {
-      throw new Error("Supabase URL and Anon Key must be set")
-    }
-
-    supabase = createClient(url, key)
+// ✅ Modified: This function now returns the same client instance every time,
+// preventing the "Multiple GoTrueClient instances" warning.
+export function getSupabaseClient() {
+  if (client) {
+    return client;
   }
-  return supabase
+
+  client = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  return client;
 }
