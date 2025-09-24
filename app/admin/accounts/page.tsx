@@ -44,7 +44,7 @@ interface UserWithOrg {
   authorized: boolean
   last_login: string | null
   role: string | null
-  organization_name?: string | null // ✅ Added
+  organization_name?: string | null
 }
 
 export default function AccountManagementPage() {
@@ -68,10 +68,7 @@ export default function AccountManagementPage() {
   // ✅ fetch users from the new view
   const fetchUsers = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from("user_accounts") // ✅ Changed from profiles
-      .select("*")
-
+    const { data, error } = await supabase.from("user_accounts").select("*")
     if (!error && data) {
       setUsers(data as UserWithOrg[])
     }
@@ -80,26 +77,22 @@ export default function AccountManagementPage() {
 
   // ✅ fetch roles
   const fetchRoles = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("roles")
-      .select("key, description")
+    const { data, error } = await supabase.from("roles").select("key, description")
     if (!error && data) {
       setRoles(data as Role[])
     }
   }, [supabase])
 
-  // ✅ fetch organizations (no selectedOrgId dep)
+  // ✅ fetch organizations
   const fetchOrganizations = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("id, name")
+    const { data, error } = await supabase.from("organizations").select("id, name")
     if (!error && data) {
       setOrganizations(data as Organization[])
       if (data.length > 0 && !selectedOrgId) {
         setSelectedOrgId(data[0].id) // default only if none selected
       }
     }
-  }, [supabase]) // ✅ no selectedOrgId dependency
+  }, [supabase, selectedOrgId])
 
   useEffect(() => {
     fetchUsers()
@@ -107,27 +100,37 @@ export default function AccountManagementPage() {
     fetchOrganizations()
   }, [fetchUsers, fetchRoles, fetchOrganizations])
 
-  async function toggleField(
-    userId: string,
-    field: keyof UserWithOrg,
-    value: boolean
-  ) {
-    await supabase.from("profiles").update({ [field]: value }).eq("id", userId)
-    fetchUsers()
-  }
-
-  async function updateRole(userId: string, role: string) {
-    await supabase.from("profiles").update({ role }).eq("id", userId)
-    fetchUsers()
-  }
-
-  async function deleteUser(userId: string) {
-    if (confirm("Are you sure you want to delete this user?")) {
-      await supabase.from("profiles").delete().eq("id", userId)
-      fetchUsers()
+  // ✅ Changed: update state directly instead of re-fetching
+  async function toggleField(userId: string, field: keyof UserWithOrg, value: boolean) {
+    const { error } = await supabase.from("profiles").update({ [field]: value }).eq("id", userId)
+    if (!error) {
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, [field]: value } : u))
+      )
     }
   }
 
+  // ✅ Changed: update state directly
+  async function updateRole(userId: string, role: string) {
+    const { error } = await supabase.from("profiles").update({ role }).eq("id", userId)
+    if (!error) {
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role } : u))
+      )
+    }
+  }
+
+  // ✅ Changed: update state directly
+  async function deleteUser(userId: string) {
+    if (confirm("Are you sure you want to delete this user?")) {
+      const { error } = await supabase.from("profiles").delete().eq("id", userId)
+      if (!error) {
+        setUsers((prev) => prev.filter((u) => u.id !== userId))
+      }
+    }
+  }
+
+  // ✅ Changed: update state directly
   async function addUser() {
     if (!newEmail) {
       alert("Email is required.")
@@ -157,9 +160,26 @@ export default function AccountManagementPage() {
       }
 
       alert("Invitation sent successfully!")
+
+      // ✅ Add new user locally
+      setUsers((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(), // placeholder until Supabase updates with real ID
+          email: newEmail,
+          first_name: newFirstName,
+          last_name: newLastName,
+          job_title: newJobTitle || null,
+          phone: newPhone || null,
+          authorized: newAuthorized,
+          role: newRole,
+          last_login: null,
+          organization_name:
+            organizations.find((org) => org.id === selectedOrgId)?.name || null,
+        },
+      ])
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "An unknown error occurred."
+      const message = err instanceof Error ? err.message : "An unknown error occurred."
       alert(`Error inviting user: ${message}`)
     } finally {
       setNewEmail("")
@@ -170,7 +190,6 @@ export default function AccountManagementPage() {
       setNewAuthorized(false)
       setNewRole("workspace_user")
       setOpenAdd(false)
-      fetchUsers()
     }
   }
 
@@ -289,9 +308,7 @@ export default function AccountManagementPage() {
                   <TableCell>
                     <Switch
                       checked={u.authorized}
-                      onCheckedChange={(val) =>
-                        toggleField(u.id, "authorized", val)
-                      }
+                      onCheckedChange={(val) => toggleField(u.id, "authorized", val)}
                     />
                   </TableCell>
                   <TableCell>
@@ -309,9 +326,7 @@ export default function AccountManagementPage() {
                     </select>
                   </TableCell>
                   <TableCell>
-                    {u.last_login
-                      ? new Date(u.last_login).toLocaleString()
-                      : "—"}
+                    {u.last_login ? new Date(u.last_login).toLocaleString() : "—"}
                   </TableCell>
                   <TableCell>
                     <Button
