@@ -10,9 +10,9 @@ type OrderRow = {
 
 export async function GET(
   req: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { id: orderId } = context.params
+  const { id: orderId } = await context.params
 
   try {
     // ✅ Supabase client bound to the logged-in user session
