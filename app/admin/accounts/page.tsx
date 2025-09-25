@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Trash2, UserPlus } from "lucide-react"
+import { UserPlus } from "lucide-react" // ✅ Removed Trash2 (unused)
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -40,17 +40,15 @@ interface UserWithOrg {
   organization_name?: string | null
 }
 
-// ✅ Changed: regex for UUID validation
+// ✅ UUID regex for validation
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export default function AccountManagementPage() {
   const supabase = getSupabaseClient()
-  const [users, setUsers] = useState<UserWithOrg[]>([])
+  // ✅ Removed unused state: users, loading
   const [roles, setRoles] = useState<Role[]>([])
   const [organizations, setOrganizations] = useState<Organization[]>([])
-
-  const [loading, setLoading] = useState(true)
 
   const [openAdd, setOpenAdd] = useState(false)
   const [newEmail, setNewEmail] = useState("")
@@ -61,16 +59,6 @@ export default function AccountManagementPage() {
   const [newPhone, setNewPhone] = useState("")
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
-
-  // ✅ fetch users from the new view
-  const fetchUsers = useCallback(async () => {
-    setLoading(true)
-    const { data, error } = await supabase.from("user_accounts").select("*")
-    if (!error && data) {
-      setUsers(data as UserWithOrg[])
-    }
-    setLoading(false)
-  }, [supabase])
 
   // ✅ fetch roles
   const fetchRoles = useCallback(async () => {
@@ -93,12 +81,11 @@ export default function AccountManagementPage() {
   }, [supabase])
 
   useEffect(() => {
-    fetchUsers()
     fetchRoles()
     fetchOrganizations()
-  }, [fetchUsers, fetchRoles, fetchOrganizations])
+  }, [fetchRoles, fetchOrganizations])
 
-  // ✅ Changed: reset orgId if it no longer exists
+  // ✅ ensure selected org still exists
   useEffect(() => {
     if (
       selectedOrgId &&
@@ -108,50 +95,9 @@ export default function AccountManagementPage() {
     }
   }, [organizations, selectedOrgId])
 
-  // ✅ Changed: update state directly instead of re-fetching
-  async function toggleField(
-    userId: string,
-    field: keyof UserWithOrg,
-    value: boolean
-  ) {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ [field]: value })
-      .eq("id", userId)
-    if (!error) {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, [field]: value } : u))
-      )
-    }
-  }
-
-  // ✅ Changed: update state directly
-  async function updateRole(userId: string, role: string) {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role })
-      .eq("id", userId)
-    if (!error) {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role } : u))
-      )
-    }
-  }
-
-  // ✅ Changed: update state directly
-  async function deleteUser(userId: string) {
-    if (confirm("Are you sure you want to delete this user?")) {
-      const { error } = await supabase.from("profiles").delete().eq("id", userId)
-      if (!error) {
-        setUsers((prev) => prev.filter((u) => u.id !== userId))
-      }
-    }
-  }
-
-  // ✅ Changed: add user with normalization
+  // ✅ Add user
   async function addUser() {
     const email = newEmail.trim()
-
     if (!email) {
       alert("Email is required.")
       return
@@ -188,7 +134,7 @@ export default function AccountManagementPage() {
         }),
       })
 
-      const json: unknown = await res.json()
+      const json: unknown = await res.json() // ✅ no `any`
       if (!res.ok) {
         const errorMessage =
           typeof json === "object" &&
@@ -201,9 +147,6 @@ export default function AccountManagementPage() {
       }
 
       alert("Invitation sent successfully!")
-
-      // ✅ Changed: refresh from backend instead of optimistic local add
-      await fetchUsers()
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "An unknown error occurred."
@@ -264,7 +207,7 @@ export default function AccountManagementPage() {
                   onChange={(e) => setNewPhone(e.target.value)}
                 />
 
-                {/* ✅ Changed: Organization dropdown includes "No organization" */}
+                {/* ✅ Org dropdown with "No organization" option */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={selectedOrgId}
@@ -307,7 +250,7 @@ export default function AccountManagementPage() {
           </Dialog>
         </div>
 
-        {/* TODO: render table of users here */}
+        {/* TODO: add user table here later */}
       </CardContent>
     </Card>
   )
