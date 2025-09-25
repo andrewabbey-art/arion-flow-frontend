@@ -149,7 +149,7 @@ export default function AccountManagementPage() {
           phone: newPhone,
           role: newRole,
           authorized: newAuthorized,
-          organization_id: selectedOrgId,
+          organization_id: selectedOrgId || undefined,
           org_role: newRole === "arion_admin" ? "admin" : "member",
         }),
       })
