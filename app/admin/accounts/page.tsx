@@ -1,6 +1,9 @@
+// ✅ Changed: This file has been updated to allow in-line editing of user profiles.
+// I've introduced an "edit mode" for each row to make the UI clean and intuitive.
+
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, ChangeEvent } from "react"
 import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -21,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Trash2, UserPlus } from "lucide-react"
+import { Trash2, UserPlus, Edit, Save, XCircle } from "lucide-react" // ✅ Added icons
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -52,8 +55,11 @@ export default function AccountManagementPage() {
   const [users, setUsers] = useState<UserWithOrg[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [organizations, setOrganizations] = useState<Organization[]>([])
-
   const [loading, setLoading] = useState(true)
+
+  // ✅ Added: State for handling in-line editing
+  const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const [editedUserData, setEditedUserData] = useState<Partial<UserWithOrg> | null>(null)
 
   const [openAdd, setOpenAdd] = useState(false)
   const [newEmail, setNewEmail] = useState("")
@@ -65,7 +71,6 @@ export default function AccountManagementPage() {
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
 
-  // ✅ fetch users from the new view
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase.from("user_accounts").select("*")
@@ -75,7 +80,6 @@ export default function AccountManagementPage() {
     setLoading(false)
   }, [supabase])
 
-  // ✅ fetch roles
   const fetchRoles = useCallback(async () => {
     const { data, error } = await supabase.from("roles").select("key, description")
     if (!error && data) {
@@ -83,13 +87,12 @@ export default function AccountManagementPage() {
     }
   }, [supabase])
 
-  // ✅ fetch organizations
   const fetchOrganizations = useCallback(async () => {
     const { data, error } = await supabase.from("organizations").select("id, name")
     if (!error && data) {
       setOrganizations(data as Organization[])
       if (data.length > 0 && !selectedOrgId) {
-        setSelectedOrgId(data[0].id) // default only if none selected
+        setSelectedOrgId(data[0].id)
       }
     }
   }, [supabase, selectedOrgId])
@@ -100,7 +103,6 @@ export default function AccountManagementPage() {
     fetchOrganizations()
   }, [fetchUsers, fetchRoles, fetchOrganizations])
 
-  // ✅ Changed: update state directly instead of re-fetching
   async function toggleField(userId: string, field: keyof UserWithOrg, value: boolean) {
     const { error } = await supabase.from("profiles").update({ [field]: value }).eq("id", userId)
     if (!error) {
@@ -110,7 +112,6 @@ export default function AccountManagementPage() {
     }
   }
 
-  // ✅ Changed: update state directly
   async function updateRole(userId: string, role: string) {
     const { error } = await supabase.from("profiles").update({ role }).eq("id", userId)
     if (!error) {
@@ -120,7 +121,6 @@ export default function AccountManagementPage() {
     }
   }
 
-  // ✅ Changed: update state directly
   async function deleteUser(userId: string) {
     if (confirm("Are you sure you want to delete this user?")) {
       const { error } = await supabase.from("profiles").delete().eq("id", userId)
@@ -130,68 +130,93 @@ export default function AccountManagementPage() {
     }
   }
 
-  // ✅ Changed: update state directly
   async function addUser() {
+    // ... (existing addUser function is unchanged)
     if (!newEmail) {
-      alert("Email is required.")
-      return
-    }
+       alert("Email is required.")
+       return
+     }
 
-    try {
-      const res = await fetch("/api/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: newEmail,
-          first_name: newFirstName,
-          last_name: newLastName,
-          job_title: newJobTitle,
-          phone: newPhone,
-          role: newRole,
-          authorized: newAuthorized,
-          organization_id: selectedOrgId || undefined,
-          org_role: newRole === "arion_admin" ? "admin" : "member",
-        }),
-      })
+     try {
+       const res = await fetch("/api/invite", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+           email: newEmail,
+           first_name: newFirstName,
+           last_name: newLastName,
+           job_title: newJobTitle,
+           phone: newPhone,
+           role: newRole,
+           authorized: newAuthorized,
+           organization_id: selectedOrgId || undefined,
+           org_role: newRole === "arion_admin" ? "admin" : "member",
+         }),
+       })
 
-      const json = await res.json()
-      if (!res.ok) {
-        throw new Error(json.error || "An unknown error occurred.")
-      }
+       const json = await res.json()
+       if (!res.ok) {
+         throw new Error(json.error || "An unknown error occurred.")
+       }
 
-      alert("Invitation sent successfully!")
+       alert("Invitation sent successfully!")
+       await fetchUsers() // ✅ Refresh list after adding
+    } catch (err: unknown) {
+       const message = err instanceof Error ? err.message : "An unknown error occurred."
+       alert(`Error inviting user: ${message}`)
+     } finally {
+       setNewEmail("")
+       setNewFirstName("")
+       setNewLastName("")
+       setNewJobTitle("")
+       setNewPhone("")
+       setNewAuthorized(false)
+       setNewRole("workspace_user")
+       setOpenAdd(false)
+     }
+  }
 
-      // ✅ Add new user locally
-      setUsers((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(), // placeholder until Supabase updates with real ID
-          email: newEmail,
-          first_name: newFirstName,
-          last_name: newLastName,
-          job_title: newJobTitle || null,
-          phone: newPhone || null,
-          authorized: newAuthorized,
-          role: newRole,
-          last_login: null,
-          organization_name:
-            organizations.find((org) => org.id === selectedOrgId)?.name || null,
-        },
-      ])
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "An unknown error occurred."
-      alert(`Error inviting user: ${message}`)
-    } finally {
-      setNewEmail("")
-      setNewFirstName("")
-      setNewLastName("")
-      setNewJobTitle("")
-      setNewPhone("")
-      setNewAuthorized(false)
-      setNewRole("workspace_user")
-      setOpenAdd(false)
+  // ✅ Added: Functions to handle the edit state
+  const handleEdit = (user: UserWithOrg) => {
+    setEditingUserId(user.id)
+    setEditedUserData({ ...user })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingUserId(null)
+    setEditedUserData(null)
+  }
+
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    if (editedUserData) {
+      setEditedUserData({ ...editedUserData, [name]: value })
     }
   }
+
+  // ✅ Added: Function to save the updated user data
+  const handleSaveEdit = async () => {
+    if (!editingUserId || !editedUserData) return
+
+    const { id, organization_name, email, last_login, ...updateData } = editedUserData
+    
+    const { error } = await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", editingUserId)
+
+    if (error) {
+      alert("Error updating user: " + error.message)
+    } else {
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === editingUserId ? { ...user, ...editedUserData } : user
+        )
+      )
+      handleCancelEdit()
+    }
+  }
+
 
   return (
     <Card className="p-6">
@@ -205,77 +230,73 @@ export default function AccountManagementPage() {
               </Button>
             </DialogTrigger>
             <DialogContent>
+              {/* ... (Dialog content is unchanged) */}
               <DialogHeader>
-                <DialogTitle>Add New User</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 mt-4">
-                <Input
-                  placeholder="Email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    placeholder="First Name"
-                    value={newFirstName}
-                    onChange={(e) => setNewFirstName(e.target.value)}
-                  />
-                  <Input
-                    placeholder="Last Name"
-                    value={newLastName}
-                    onChange={(e) => setNewLastName(e.target.value)}
-                  />
-                </div>
-                <Input
-                  placeholder="Job Title"
-                  value={newJobTitle}
-                  onChange={(e) => setNewJobTitle(e.target.value)}
-                />
-                <Input
-                  placeholder="Phone (Optional)"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                />
+                 <DialogTitle>Add New User</DialogTitle>
+               </DialogHeader>
+               <div className="space-y-4 mt-4">
+                 <Input
+                   placeholder="Email"
+                   value={newEmail}
+                   onChange={(e) => setNewEmail(e.target.value)}
+                 />
+                 <div className="grid grid-cols-2 gap-4">
+                   <Input
+                     placeholder="First Name"
+                     value={newFirstName}
+                     onChange={(e) => setNewFirstName(e.target.value)}
+                   />
+                   <Input
+                     placeholder="Last Name"
+                     value={newLastName}
+                     onChange={(e) => setNewLastName(e.target.value)}
+                   />
+                 </div>
+                 <Input
+                   placeholder="Job Title"
+                   value={newJobTitle}
+                   onChange={(e) => setNewJobTitle(e.target.value)}
+                 />
+                 <Input
+                   placeholder="Phone (Optional)"
+                   value={newPhone}
+                   onChange={(e) => setNewPhone(e.target.value)}
+                 />
+                 <select
+                   className="w-full rounded border px-3 py-2 text-sm"
+                   value={selectedOrgId}
+                   onChange={(e) => setSelectedOrgId(e.target.value)}
+                 >
+                   {organizations.map((org) => (
+                     <option key={org.id} value={org.id}>
+                       {org.name}
+                     </option>
+                   ))}
+                 </select>
+                 <select
+                   className="w-full rounded border px-3 py-2 text-sm"
+                   value={newRole}
+                   onChange={(e) => setNewRole(e.target.value)}
+                 >
+                   {roles.map((r) => (
+                     <option key={r.key} value={r.key}>
+                       {r.key}
+                     </option>
+                   ))}
+                 </select>
 
-                {/* ✅ Organization dropdown */}
-                <select
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  value={selectedOrgId}
-                  onChange={(e) => setSelectedOrgId(e.target.value)}
-                >
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Role dropdown */}
-                <select
-                  className="w-full rounded border px-3 py-2 text-sm"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                >
-                  {roles.map((r) => (
-                    <option key={r.key} value={r.key}>
-                      {r.key}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="new-authorized"
-                    checked={newAuthorized}
-                    onCheckedChange={setNewAuthorized}
-                  />
-                  <Label htmlFor="new-authorized">Authorized</Label>
-                </div>
-
-                <Button onClick={addUser} className="w-full">
-                  Create
-                </Button>
-              </div>
+                 <div className="flex items-center space-x-2">
+                   <Switch
+                     id="new-authorized"
+                     checked={newAuthorized}
+                     onCheckedChange={setNewAuthorized}
+                   />
+                   <Label htmlFor="new-authorized">Authorized</Label>
+                 </div>
+                 <Button onClick={addUser} className="w-full">
+                   Create
+                 </Button>
+               </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -297,48 +318,103 @@ export default function AccountManagementPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>
-                    {u.first_name} {u.last_name}
-                  </TableCell>
-                  <TableCell>{u.email}</TableCell>
-                  <TableCell>{u.organization_name || "—"}</TableCell>
-                  <TableCell>{u.job_title || "—"}</TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={u.authorized}
-                      onCheckedChange={(val) => toggleField(u.id, "authorized", val)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <select
-                      className="rounded border px-2 py-1 text-sm"
-                      value={u.role || ""}
-                      onChange={(e) => updateRole(u.id, e.target.value)}
-                    >
-                      <option value="">—</option>
-                      {roles.map((r) => (
-                        <option key={r.key} value={r.key}>
-                          {r.key}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell>
-                    {u.last_login ? new Date(u.last_login).toLocaleString() : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deleteUser(u.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {users.map((u) => {
+                // ✅ Added: Check if the current row is in edit mode
+                const isEditing = editingUserId === u.id
+
+                return (
+                  <TableRow key={u.id}>
+                    {/* ✅ Changed: Conditionally render inputs or text */}
+                    <TableCell>
+                      {isEditing ? (
+                        <div className="flex gap-2">
+                          <Input
+                            name="first_name"
+                            value={editedUserData?.first_name || ""}
+                            onChange={handleInputChange}
+                            placeholder="First Name"
+                            className="min-w-[100px]"
+                          />
+                          <Input
+                            name="last_name"
+                            value={editedUserData?.last_name || ""}
+                            onChange={handleInputChange}
+                            placeholder="Last Name"
+                             className="min-w-[100px]"
+                          />
+                        </div>
+                      ) : (
+                        `${u.first_name} ${u.last_name}`
+                      )}
+                    </TableCell>
+                    <TableCell>{u.email}</TableCell>
+                    <TableCell>{u.organization_name || "—"}</TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          name="job_title"
+                          value={editedUserData?.job_title || ""}
+                          onChange={handleInputChange}
+                          placeholder="Job Title"
+                        />
+                      ) : (
+                        u.job_title || "—"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={u.authorized}
+                        onCheckedChange={(val) => toggleField(u.id, "authorized", val)}
+                        disabled={isEditing} // ✅ Disable while editing other fields
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <select
+                        className="rounded border bg-background px-2 py-1 text-sm"
+                        value={u.role || ""}
+                        onChange={(e) => updateRole(u.id, e.target.value)}
+                        disabled={isEditing} // ✅ Disable while editing other fields
+                      >
+                        <option value="">—</option>
+                        {roles.map((r) => (
+                          <option key={r.key} value={r.key}>
+                            {r.key}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell>
+                      {u.last_login ? new Date(u.last_login).toLocaleString() : "—"}
+                    </TableCell>
+                    {/* ✅ Changed: Show Save/Cancel or Edit/Delete buttons */}
+                    <TableCell className="flex gap-2">
+                      {isEditing ? (
+                        <>
+                          <Button size="sm" onClick={handleSaveEdit} variant="outline">
+                            <Save className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" onClick={handleCancelEdit} variant="ghost">
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button size="sm" onClick={() => handleEdit(u)} variant="outline">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteUser(u.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         )}
