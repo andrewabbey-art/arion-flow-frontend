@@ -1,70 +1,193 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { getSupabaseClient } from "../../../../../lib/supabaseClient"
 
-type OrderRow = {
+const RUNPOD_GRAPHQL_ENDPOINT = "https://api.runpod.io/graphql"
+
+const POD_QUERY = `
+  query Pod($podId: String!) {
+    pod(input: { podId: $podId }) {
+      id
+      gpuCount
+      desiredStatus
+      machine {
+        gpuTypeId
+        gpuDisplayName
+        gpuType {
+          id
+          displayName
+        }
+      }
+      runtime {
+        uptimeInSeconds
+        gpus {
+          id
+          gpuUtilPercent
+          memoryUtilPercent
+        }
+        container {
+          cpuPercent
+          memoryPercent
+        }
+        ports {
+          ip
+          isIpPublic
+          privatePort
+          publicPort
+          type
+        }
+      }
+    }
+  }
+`
+
+// Strong types
+type RunpodGpu = {
   id: string
-  pod_id: string | null
-  volume_id: string | null
+  gpuUtilPercent: number
+  memoryUtilPercent: number
+}
+
+type RunpodPort = {
+  ip: string
+  isIpPublic: boolean
+  privatePort: number
+  publicPort: number
+  type: string
+}
+
+type RunpodContainer = {
+  cpuPercent: number | null
+  memoryPercent: number | null
+}
+
+type RunpodPod = {
+  id: string
+  gpuCount: number
+  desiredStatus: string
+  machine?: {
+    gpuTypeId?: string
+    gpuDisplayName?: string
+    gpuType?: { id: string; displayName: string }
+  }
+  runtime?: {
+    uptimeInSeconds?: number
+    gpus?: RunpodGpu[]
+    container?: RunpodContainer
+    ports?: RunpodPort[]
+  }
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number) {
+  return Promise.race([
+    p,
+    new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error(`Request timed out after ${ms} ms`)), ms)
+    ),
+  ])
 }
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const { id: orderId } = await context.params
-
   try {
-    // ✅ Supabase client bound to the logged-in user session
-    const supabase = createRouteHandlerClient({ cookies })
+    const { id } = await context.params
+    const supabase = getSupabaseClient()
 
-    // ✅ Ensure session is valid
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession()
+    const RUNPOD_API_KEY = process.env.RUNPOD_API_KEY
+    if (!RUNPOD_API_KEY) throw new Error("Missing RUNPOD_API_KEY env var.")
 
-    if (sessionError || !session) {
-      return NextResponse.json(
-        { ok: false, error: "Not authenticated" },
-        { status: 401 }
-      )
-    }
-
-    // ✅ Query orders as the logged-in user
     const { data: order, error } = await supabase
       .from("orders")
       .select("id, pod_id, volume_id")
-      .eq("id", orderId)
-      .single() // may throw 406 if row is not visible under RLS
+      .eq("id", id)
+      .single()
 
-    if (error || !order) {
+    if (error || !order?.pod_id) {
       return NextResponse.json(
-        { ok: false, error: "Order not found or not accessible" },
+        { ok: false, error: "Order not found or missing pod_id" },
         { status: 404 }
       )
     }
 
-    const typedOrder = order as OrderRow
-    if (!typedOrder.pod_id) {
+    const gqlResp = await withTimeout(
+      fetch(RUNPOD_GRAPHQL_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${RUNPOD_API_KEY}`,
+        },
+        body: JSON.stringify({
+          query: POD_QUERY,
+          variables: { podId: order.pod_id },
+        }),
+      }),
+      15000
+    )
+
+    const gqlJson = await gqlResp.json().catch(() => ({}))
+    if (!gqlResp.ok || gqlJson.errors) {
+      const errMsg =
+        gqlJson?.errors?.map((e: { message: string }) => e.message).join("; ") ||
+        `GraphQL error (status ${gqlResp.status})`
+      console.error("GraphQL telemetry error:", errMsg, "resp:", JSON.stringify(gqlJson))
+      return NextResponse.json({ ok: false, error: errMsg }, { status: 502 })
+    }
+
+    const pod: RunpodPod | null = gqlJson?.data?.pod
+    if (!pod) {
       return NextResponse.json(
-        { ok: false, error: "Order has no pod_id" },
-        { status: 400 }
+        { ok: false, error: "Pod not found" },
+        { status: 404 }
       )
     }
 
-    // ✅ Placeholder telemetry (replace with RunPod API if needed)
+    // Resolve GPU type string with fallbacks
+    const gpuType =
+      pod.machine?.gpuType?.displayName ??
+      pod.machine?.gpuDisplayName ??
+      pod.machine?.gpuTypeId ??
+      "Unknown"
+
     const telemetry = {
-      runtime_status: "running",
-      uptime_seconds: 1234,
-      gpu_type: "NVIDIA A100",
-      volume_size_gb: 50,
+      pod_id: pod.id,
+      desired_status: pod.desiredStatus,
+      gpu_count: pod.gpuCount,
+      gpu_type: gpuType,
+      uptime_seconds: pod.runtime?.uptimeInSeconds ?? 0,
+      gpu_metrics: (pod.runtime?.gpus ?? []).map((g: RunpodGpu) => ({
+        id: g.id,
+        gpu_util_percent: g.gpuUtilPercent,
+        memory_util_percent: g.memoryUtilPercent,
+      })),
+      container_metrics: {
+        cpu_percent: pod.runtime?.container?.cpuPercent ?? null,
+        memory_percent: pod.runtime?.container?.memoryPercent ?? null,
+      },
+      ports: (pod.runtime?.ports ?? []).map((p: RunpodPort) => ({
+        ip: p.ip,
+        is_ip_public: p.isIpPublic,
+        private_port: p.privatePort,
+        public_port: p.publicPort,
+        type: p.type,
+      })),
+      workspace_url: `https://${order.pod_id}-8080.proxy.runpod.net/`,
     }
 
+    await supabase
+      .from("orders")
+      .update({
+        runtime_status: telemetry.desired_status,
+        uptime_seconds: telemetry.uptime_seconds,
+        workspace_url: telemetry.workspace_url,
+        last_checked: new Date().toISOString(),
+      })
+      .eq("id", order.id)
+
     return NextResponse.json({ ok: true, telemetry })
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error"
-    console.error(`Telemetry failed for order ${orderId}:`, message)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error"
+    console.error("Telemetry error:", message)
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
