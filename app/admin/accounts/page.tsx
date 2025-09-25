@@ -1,5 +1,5 @@
-// ✅ Changed: The handleSaveEdit function has been corrected to only update
-// columns that actually exist in the 'profiles' table, resolving the schema error.
+// ✅ Changed: The handleSaveEdit function is now more robust. It verifies that
+// the database update was successful before updating the UI to prevent silent failures.
 
 "use client"
 
@@ -37,8 +37,6 @@ interface Organization {
   name: string
 }
 
-// ✅ Added: It's safer to include all possible fields from the view
-// to avoid type errors, even if we don't display them all.
 interface UserWithOrg {
   id: string
   email: string
@@ -195,12 +193,10 @@ export default function AccountManagementPage() {
     }
   }
 
-  // ✅ Changed: This function now builds a clean payload for the 'profiles' table.
+  // ✅ Changed: This function now verifies the update was successful.
   const handleSaveEdit = async () => {
     if (!editingUserId || !editedUserData) return
 
-    // Explicitly create the object with only the columns that exist in 'profiles'.
-    // This prevents trying to update columns that come from the database view.
     const updateData = {
       first_name: editedUserData.first_name,
       last_name: editedUserData.last_name,
@@ -208,21 +204,33 @@ export default function AccountManagementPage() {
       phone: editedUserData.phone,
     }
 
-    const { error } = await supabase
+    // Chain .select() to get the updated row back for verification
+    const { data, error } = await supabase
       .from("profiles")
       .update(updateData)
       .eq("id", editingUserId)
+      .select() // Ask Supabase to return the updated row(s)
 
     if (error) {
+      console.error("Supabase update error:", error)
       alert("Error updating user: " + error.message)
     } else {
-      // Optimistically update the local state with the saved data
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.id === editingUserId ? { ...user, ...editedUserData } : user
+      // Check if any rows were actually updated.
+      // If data is null or empty, it likely means RLS prevented the update.
+      if (!data || data.length === 0) {
+        alert(
+          "Update failed. The record was not found or you may not have permission to modify it."
         )
-      )
-      handleCancelEdit() // Exit edit mode
+        // We do NOT want to optimistically update the UI in this case.
+      } else {
+        // Only update the UI if the database was successfully updated
+        setUsers((prev) =>
+          prev.map((user) =>
+            user.id === editingUserId ? { ...user, ...editedUserData } : user
+          )
+        )
+        handleCancelEdit() // Exit edit mode
+      }
     }
   }
 
