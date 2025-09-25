@@ -2,19 +2,26 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { getSupabaseClient } from "@/lib/supabaseClient"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { UserPlus } from "lucide-react"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Trash2, UserPlus } from "lucide-react"
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -27,15 +34,26 @@ interface Organization {
   name: string
 }
 
-// ✅ Removed unused UserWithOrg
-
-const uuidRegex =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+interface UserWithOrg {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  job_title: string | null
+  phone: string | null
+  authorized: boolean
+  last_login: string | null
+  role: string | null
+  organization_name?: string | null
+}
 
 export default function AccountManagementPage() {
   const supabase = getSupabaseClient()
+  const [users, setUsers] = useState<UserWithOrg[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [organizations, setOrganizations] = useState<Organization[]>([])
+
+  const [loading, setLoading] = useState(true)
 
   const [openAdd, setOpenAdd] = useState(false)
   const [newEmail, setNewEmail] = useState("")
@@ -47,92 +65,121 @@ export default function AccountManagementPage() {
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
 
+  // ✅ fetch users from the new view
+  const fetchUsers = useCallback(async () => {
+    setLoading(true)
+    const { data, error } = await supabase.from("user_accounts").select("*")
+    if (!error && data) {
+      setUsers(data as UserWithOrg[])
+    }
+    setLoading(false)
+  }, [supabase])
+
+  // ✅ fetch roles
   const fetchRoles = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("roles")
-      .select("key, description")
+    const { data, error } = await supabase.from("roles").select("key, description")
     if (!error && data) {
       setRoles(data as Role[])
     }
   }, [supabase])
 
+  // ✅ fetch organizations
   const fetchOrganizations = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("id, name")
+    const { data, error } = await supabase.from("organizations").select("id, name")
     if (!error && data) {
       setOrganizations(data as Organization[])
+      if (data.length > 0 && !selectedOrgId) {
+        setSelectedOrgId(data[0].id) // default only if none selected
+      }
     }
-  }, [supabase])
+  }, [supabase, selectedOrgId])
 
   useEffect(() => {
+    fetchUsers()
     fetchRoles()
     fetchOrganizations()
-  }, [fetchRoles, fetchOrganizations])
+  }, [fetchUsers, fetchRoles, fetchOrganizations])
 
-  useEffect(() => {
-    if (
-      selectedOrgId &&
-      !organizations.some((organization) => organization.id === selectedOrgId)
-    ) {
-      setSelectedOrgId("")
+  // ✅ Changed: update state directly instead of re-fetching
+  async function toggleField(userId: string, field: keyof UserWithOrg, value: boolean) {
+    const { error } = await supabase.from("profiles").update({ [field]: value }).eq("id", userId)
+    if (!error) {
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, [field]: value } : u))
+      )
     }
-  }, [organizations, selectedOrgId])
+  }
 
+  // ✅ Changed: update state directly
+  async function updateRole(userId: string, role: string) {
+    const { error } = await supabase.from("profiles").update({ role }).eq("id", userId)
+    if (!error) {
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role } : u))
+      )
+    }
+  }
+
+  // ✅ Changed: update state directly
+  async function deleteUser(userId: string) {
+    if (confirm("Are you sure you want to delete this user?")) {
+      const { error } = await supabase.from("profiles").delete().eq("id", userId)
+      if (!error) {
+        setUsers((prev) => prev.filter((u) => u.id !== userId))
+      }
+    }
+  }
+
+  // ✅ Changed: update state directly
   async function addUser() {
-    const email = newEmail.trim()
-    if (!email) {
+    if (!newEmail) {
       alert("Email is required.")
       return
     }
 
     try {
-      const organizationId = selectedOrgId.trim()
-      const normalizedOrgId =
-        organizationId && uuidRegex.test(organizationId) ? organizationId : ""
-
-      const firstName = newFirstName.trim()
-      const lastName = newLastName.trim()
-      const jobTitle = newJobTitle.trim()
-      const phone = newPhone.trim()
-
       const res = await fetch("/api/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
-          first_name: firstName || undefined,
-          last_name: lastName || undefined,
-          job_title: jobTitle || undefined,
-          phone: phone || undefined,
+          email: newEmail,
+          first_name: newFirstName,
+          last_name: newLastName,
+          job_title: newJobTitle,
+          phone: newPhone,
           role: newRole,
           authorized: newAuthorized,
-          organization_id: normalizedOrgId || undefined,
-          org_role:
-            normalizedOrgId
-              ? newRole === "arion_admin"
-                ? "admin"
-                : "member"
-              : undefined,
+          organization_id: selectedOrgId || undefined,
+          org_role: newRole === "arion_admin" ? "admin" : "member",
         }),
       })
 
-      const json: unknown = await res.json()
+      const json = await res.json()
       if (!res.ok) {
-        const errorMessage =
-          typeof json === "object" &&
-          json !== null &&
-          "error" in json &&
-          typeof (json as Record<string, unknown>).error === "string"
-            ? (json as { error: string }).error
-            : "An unknown error occurred."
-        throw new Error(errorMessage)
+        throw new Error(json.error || "An unknown error occurred.")
       }
 
       alert("Invitation sent successfully!")
+
+      // ✅ Add new user locally
+      setUsers((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(), // placeholder until Supabase updates with real ID
+          email: newEmail,
+          first_name: newFirstName,
+          last_name: newLastName,
+          job_title: newJobTitle || null,
+          phone: newPhone || null,
+          authorized: newAuthorized,
+          role: newRole,
+          last_login: null,
+          organization_name:
+            organizations.find((org) => org.id === selectedOrgId)?.name || null,
+        },
+      ])
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "An unknown error occurred."
+      const message = err instanceof Error ? err.message : "An unknown error occurred."
       alert(`Error inviting user: ${message}`)
     } finally {
       setNewEmail("")
@@ -161,13 +208,13 @@ export default function AccountManagementPage() {
               <DialogHeader>
                 <DialogTitle>Add New User</DialogTitle>
               </DialogHeader>
-              <div className="space-y-3">
+              <div className="space-y-4 mt-4">
                 <Input
                   placeholder="Email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                 />
-                <div className="flex space-x-2">
+                <div className="grid grid-cols-2 gap-4">
                   <Input
                     placeholder="First Name"
                     value={newFirstName}
@@ -190,12 +237,12 @@ export default function AccountManagementPage() {
                   onChange={(e) => setNewPhone(e.target.value)}
                 />
 
+                {/* ✅ Organization dropdown */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={selectedOrgId}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
                 >
-                  <option value="">No organization</option>
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
                       {org.name}
@@ -203,6 +250,7 @@ export default function AccountManagementPage() {
                   ))}
                 </select>
 
+                {/* Role dropdown */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={newRole}
@@ -223,13 +271,77 @@ export default function AccountManagementPage() {
                   />
                   <Label htmlFor="new-authorized">Authorized</Label>
                 </div>
+
+                <Button onClick={addUser} className="w-full">
+                  Create
+                </Button>
               </div>
-              <DialogFooter>
-                <Button onClick={addUser}>Send Invite</Button>
-              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
+
+        {loading ? (
+          <p>Loading users...</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Organization</TableHead>
+                <TableHead>Job Title</TableHead>
+                <TableHead>Authorized</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Last Login</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell>
+                    {u.first_name} {u.last_name}
+                  </TableCell>
+                  <TableCell>{u.email}</TableCell>
+                  <TableCell>{u.organization_name || "—"}</TableCell>
+                  <TableCell>{u.job_title || "—"}</TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={u.authorized}
+                      onCheckedChange={(val) => toggleField(u.id, "authorized", val)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <select
+                      className="rounded border px-2 py-1 text-sm"
+                      value={u.role || ""}
+                      onChange={(e) => updateRole(u.id, e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {roles.map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {r.key}
+                        </option>
+                      ))}
+                    </select>
+                  </TableCell>
+                  <TableCell>
+                    {u.last_login ? new Date(u.last_login).toLocaleString() : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteUser(u.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   )
