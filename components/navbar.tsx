@@ -106,8 +106,8 @@ export default function NavBar() {
               My Account
             </Link>
 
-            {/* ✅ Only visible for Arion Admins */}
-            {profile?.role === "arion_admin" && (
+            {/* ✅ Changed: Visible for Arion Admins and Org Admins */}
+            {(profile?.role === "arion_admin" || profile?.role === "org_admin") && (
               <Link
                 href="/admin/accounts"
                 className="px-4 py-2 rounded-lg border border-destructive text-destructive text-sm font-medium hover:bg-destructive/10 transition-colors"
