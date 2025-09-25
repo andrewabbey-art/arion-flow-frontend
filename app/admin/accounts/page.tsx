@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { UserPlus } from "lucide-react" // ✅ Removed Trash2 (unused)
+import { UserPlus } from "lucide-react"
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -27,26 +27,13 @@ interface Organization {
   name: string
 }
 
-interface UserWithOrg {
-  id: string
-  email: string
-  first_name: string
-  last_name: string
-  job_title: string | null
-  phone: string | null
-  authorized: boolean
-  last_login: string | null
-  role: string | null
-  organization_name?: string | null
-}
+// ✅ Removed unused UserWithOrg
 
-// ✅ UUID regex for validation
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export default function AccountManagementPage() {
   const supabase = getSupabaseClient()
-  // ✅ Removed unused state: users, loading
   const [roles, setRoles] = useState<Role[]>([])
   const [organizations, setOrganizations] = useState<Organization[]>([])
 
@@ -60,7 +47,6 @@ export default function AccountManagementPage() {
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
 
-  // ✅ fetch roles
   const fetchRoles = useCallback(async () => {
     const { data, error } = await supabase
       .from("roles")
@@ -70,7 +56,6 @@ export default function AccountManagementPage() {
     }
   }, [supabase])
 
-  // ✅ fetch organizations
   const fetchOrganizations = useCallback(async () => {
     const { data, error } = await supabase
       .from("organizations")
@@ -85,7 +70,6 @@ export default function AccountManagementPage() {
     fetchOrganizations()
   }, [fetchRoles, fetchOrganizations])
 
-  // ✅ ensure selected org still exists
   useEffect(() => {
     if (
       selectedOrgId &&
@@ -95,7 +79,6 @@ export default function AccountManagementPage() {
     }
   }, [organizations, selectedOrgId])
 
-  // ✅ Add user
   async function addUser() {
     const email = newEmail.trim()
     if (!email) {
@@ -134,14 +117,14 @@ export default function AccountManagementPage() {
         }),
       })
 
-      const json: unknown = await res.json() // ✅ no `any`
+      const json: unknown = await res.json()
       if (!res.ok) {
         const errorMessage =
           typeof json === "object" &&
           json !== null &&
           "error" in json &&
-          typeof (json as any).error === "string"
-            ? (json as any).error
+          typeof (json as Record<string, unknown>).error === "string"
+            ? (json as { error: string }).error
             : "An unknown error occurred."
         throw new Error(errorMessage)
       }
@@ -207,7 +190,6 @@ export default function AccountManagementPage() {
                   onChange={(e) => setNewPhone(e.target.value)}
                 />
 
-                {/* ✅ Org dropdown with "No organization" option */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={selectedOrgId}
@@ -221,7 +203,6 @@ export default function AccountManagementPage() {
                   ))}
                 </select>
 
-                {/* Role dropdown */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={newRole}
@@ -249,8 +230,6 @@ export default function AccountManagementPage() {
             </DialogContent>
           </Dialog>
         </div>
-
-        {/* TODO: add user table here later */}
       </CardContent>
     </Card>
   )
