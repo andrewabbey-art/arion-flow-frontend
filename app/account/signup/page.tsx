@@ -151,12 +151,15 @@ export default function SignupPage() {
       if (!user) throw new Error("User registration failed.")
 
       // ✅ Insert profile
+      // Assign the 'org_admin' role to the profile to ensure the 'profiles_role_fkey'
+      // constraint is satisfied by a valid key, achieving the design goal.
       const profilePayload = {
         id: user.id,
         first_name: trimmedData.firstName,
         last_name: trimmedData.lastName,
         job_title: trimmedData.jobTitle || null,
         authorized: false,
+        role: "org_admin", // ✅ Modified: Explicitly set the profile role to satisfy the foreign key constraint and design intent.
       }
 
       const { error: profileError } = await supabase.from("profiles").insert(profilePayload)
@@ -177,6 +180,7 @@ export default function SignupPage() {
             first_name: profilePayload.first_name,
             last_name: profilePayload.last_name,
             job_title: profilePayload.job_title,
+            role: profilePayload.role, // ✅ Modified: Ensure role is included in update path if profile pre-exists
           })
           .eq("id", user.id)
 
@@ -198,7 +202,7 @@ export default function SignupPage() {
       const { error: organizationUserError } = await supabase.from("organization_users").insert({
         user_id: user.id,
         organization_id: organizationId,
-        role: "admin",
+        role: "admin", // The role for the organization_users table, confirming the admin status
       })
       if (organizationUserError) throw new Error(organizationUserError.message)
 
