@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     )
     
     // Use Admin client to bypass RLS and reliably get the current user's role
-    const { data: profile, error: profileError } = await supabaseAdmin 
+    const { data: profile, error: profileError } = await supabaseAdmin // ✅ Modified
       .from("profiles")
       .select("role")
       .eq("id", session.user.id)

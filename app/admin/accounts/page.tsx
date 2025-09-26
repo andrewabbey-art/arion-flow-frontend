@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback, ChangeEvent } from "react" 
+"use client"
+
+import { useEffect, useState, useCallback, ChangeEvent } from "react" // ✅ Added ChangeEvent
 import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -19,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Trash2, UserPlus, Save, X, Edit2 } from "lucide-react" 
+import { Trash2, UserPlus, Save, X, Edit2 } from "lucide-react" // ✅ Added Save, X, Edit2
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -62,7 +64,7 @@ export default function AccountManagementPage() {
   const [newPhone, setNewPhone] = useState("")
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
-  const [isOrgSelectionLocked, setIsOrgSelectionLocked] = useState(false) 
+  const [isOrgSelectionLocked, setIsOrgSelectionLocked] = useState(false) // ✅ Added
     
   // ✅ Added state for editing
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -84,13 +86,14 @@ export default function AccountManagementPage() {
     }
   }, [supabase])
 
+  // ✅ Modified to fetch organizations from API route to handle filtering
   const fetchOrganizations = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/organizations")
       const payload = (await response.json().catch(() => ({}))) as {
         data?: Organization[]
         error?: string
-        meta?: { selectionLocked?: boolean } 
+        meta?: { selectionLocked?: boolean } // ✅ Added
       }
 
       if (!response.ok) {
@@ -99,7 +102,7 @@ export default function AccountManagementPage() {
 
       const organizationsData = payload.data ?? []
       setOrganizations(organizationsData)
-      setIsOrgSelectionLocked(Boolean(payload.meta?.selectionLocked)) 
+      setIsOrgSelectionLocked(Boolean(payload.meta?.selectionLocked)) // ✅ Added
       setSelectedOrgId((current) => {
         if (!current || !organizationsData.some((org) => org.id === current)) {
           return organizationsData[0]?.id ?? ""
@@ -112,10 +115,10 @@ export default function AccountManagementPage() {
       console.error(message)
       alert(message)
     }
-  }, []) 
+  }, []) // Dependencies removed as API handles user context internally
 
   const updateProfile = useCallback(
-    async (userId: string, updates: Partial<UserWithOrg>) => { 
+    async (userId: string, updates: Partial<UserWithOrg>) => { // ✅ Added
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
         headers: {
@@ -197,8 +200,8 @@ export default function AccountManagementPage() {
       return
     }
 
-    if (!selectedOrgId) { 
-      alert("Organization selection is required.") 
+    if (!selectedOrgId) { // ✅ Added
+      alert("Organization selection is required.") // ✅ Modified
       return
     }
 
@@ -247,7 +250,7 @@ export default function AccountManagementPage() {
 
   const availableNewRoles = roles.filter((r) => 
     isOrgSelectionLocked ? !restrictedRoles.includes(r.key) : true
-  ) // ✅ Added
+  ) // ✅ Added: Filtered roles for org_admin
 
   // Enforce default role update if the previous one is restricted
   useEffect(() => { // ✅ Added
@@ -354,10 +357,10 @@ export default function AccountManagementPage() {
 
                 {/* ✅ Organization dropdown */}
                 <select
-                  className="w-full rounded border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" 
+                  className="w-full rounded border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" // ✅ Modified
                   value={selectedOrgId}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
-                  disabled={isOrgSelectionLocked || organizations.length <= 1} 
+                  disabled={isOrgSelectionLocked || organizations.length <= 1} // ✅ Modified: Disable if locked or only one option
                 >
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
@@ -372,6 +375,7 @@ export default function AccountManagementPage() {
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value)}
                 >
+                  <option value="">—</option>
                   {availableNewRoles.map((r) => ( // ✅ Modified
                     <option key={r.key} value={r.key}>
                       {r.key}
@@ -442,10 +446,10 @@ export default function AccountManagementPage() {
                       </TableCell>
                       <TableCell>
                         <Switch
-                          checked={Boolean(editedUserData.authorized)} 
+                          checked={Boolean(editedUserData.authorized)} // ✅ Modified
                           onCheckedChange={(val) =>
                             setEditedUserData((prev) =>
-                              prev ? { ...prev, authorized: val } : prev 
+                              prev ? { ...prev, authorized: val } : prev // ✅ Modified
                             )
                           }
                         />
@@ -456,7 +460,7 @@ export default function AccountManagementPage() {
                           value={editedUserData.role || ""}
                           onChange={(e) =>
                             setEditedUserData((prev) =>
-                              prev ? { ...prev, role: e.target.value } : prev 
+                              prev ? { ...prev, role: e.target.value } : prev // ✅ Modified
                             )
                           }
                         >
