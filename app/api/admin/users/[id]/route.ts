@@ -1,9 +1,10 @@
-import { createClient } from "@supabase/supabase-js"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
-import { NextRequest, NextResponse } from "next/server" // ✅ Modified to use NextRequest
+import { NextRequest, NextResponse } from "next/server"
+import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs" // ✅ Added
+import { cookies } from "next/headers" // ✅ Added
+import type { PostgrestSingleResponse } from "@supabase/supabase-js"
 
-// Define types for strictness
+// Define types for strictness to resolve @typescript-eslint/no-explicit-any errors
 type ProfileUpdate = { // ✅ Added
   first_name?: string
   last_name?: string
@@ -32,62 +33,41 @@ const ALLOWED_FIELDS = new Set([
   "role",
 ])
 
-// Helper function to create the Admin client
-const getSupabaseAdminClient = () => {
-  if (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.SUPABASE_SERVICE_ROLE_KEY
-  ) {
-    throw new Error("Server misconfigured: missing Supabase env vars")
-  }
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
-}
-
-// Handler for PATCH /api/admin/users/[id] (used for profile updates)
-export async function PATCH( 
-  req: NextRequest, // ✅ Modified to use NextRequest
+export async function PATCH(
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const targetUserId = params.id
+  const supabaseAdmin = getSupabaseAdminClient()
+  const supabase = createRouteHandlerClient({ cookies }) // ✅ Added
 
-  if (!targetUserId) {
-    return NextResponse.json({ error: "User id is required." }, { status: 400 })
-  }
+  const userId = params.id
 
   try {
-    const cookieStore = cookies()
-    const supabaseClient = createRouteHandlerClient({ cookies: () => cookieStore })
+    // 1. Auth check
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Unauthorized. No valid session found." },
+        { status: 401 }
+      )
+    }
 
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabaseClient.auth.getSession()
-
-    if (sessionError || !session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const supabaseAdmin = getSupabaseAdminClient()
-
-    // 1. Get invoker's role using the Admin client to bypass RLS
-    const { data: invokerProfile, error: invokerError } = await supabaseAdmin
+      data: { role: currentUserRole },
+    } = await supabaseAdmin
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
-      .maybeSingle()
+      .eq("id", user.id)
+      .single()
 
-    if (invokerError || !invokerProfile) {
-      console.error("Failed to retrieve invoker profile:", invokerError)
-      return NextResponse.json({ error: "Authentication failed." }, { status: 403 })
-    }
+    const isOrgAdmin = currentUserRole === "org_admin"
 
-    const normalizedInvokerRole = invokerProfile.role?.trim().toLowerCase()
-    const isOrgAdmin = normalizedInvokerRole === "org_admin" 
-
-    const body = (await req.json()) as Record<string, unknown>
+    // 2. Parse incoming updates
+    const body = await req.json()
     const updateEntries = Object.entries(body).filter(([field]) =>
       ALLOWED_FIELDS.has(field)
     )
@@ -99,49 +79,49 @@ export async function PATCH(
       )
     }
 
-    const updates = Object.fromEntries(updateEntries) as ProfileUpdate
+    const updates = Object.fromEntries(updateEntries) as ProfileUpdate // ✅ Typed to remove @typescript-eslint/no-explicit-any
 
     // 2. Security Check: Prevent role elevation to 'arion_admin' by 'org_admin'
-    if (isOrgAdmin) { 
+    if (isOrgAdmin) { // ✅ Added
       const newRole = updates.role?.trim().toLowerCase()
       
       // If the org_admin is trying to set the role to 'arion_admin', reject it
-      if (newRole === "arion_admin") { 
+      if (newRole === "arion_admin") { // ✅ Added
         return NextResponse.json(
           { error: "You do not have permission to assign the 'arion_admin' role." },
           { status: 403 }
         )
       }
     }
-    
-    // 3. Perform the update with explicit data type
-    const { data, error: updateError } = await supabaseAdmin
+
+    const response: PostgrestSingleResponse<ProfileData> = await supabaseAdmin
       .from("profiles")
       .update(updates)
-      .eq("id", targetUserId)
-      .select<string, ProfileData>() // ✅ Modified: Explicitly select ProfileData type to resolve 'any' error
+      .eq("id", userId)
+      .select()
       .single()
 
-    if (updateError) { 
-      console.error("Supabase Update Error:", updateError)
-      throw updateError
+    const { data, error } = response
+
+    if (error) {
+      throw error
     }
 
     if (!data) {
       return NextResponse.json(
-        { error: "User not found or nothing updated." },
+        {
+          error:
+            "Update failed. The record may not exist or could not be modified.",
+        },
         { status: 404 }
       )
     }
 
-    // 4. Return the updated data 
-    return NextResponse.json({
-      data: data,
-    })
+    return NextResponse.json({ data })
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to update user profile."
-    console.error(`PATCH /api/admin/users/[id] error:`, message)
+      error instanceof Error ? error.message : "Failed to update the user."
+    console.error(`/api/admin/users/${userId} error:`, message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
