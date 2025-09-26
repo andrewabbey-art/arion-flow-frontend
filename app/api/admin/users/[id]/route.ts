@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server" // ✅ Modified
 
 import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
 
@@ -14,8 +14,11 @@ const ALLOWED_FIELDS = new Set([
 ])
 
 // ✅ Modified signature to use inline type for context
-export async function PATCH(request: Request, context: { params: { id: string } }) {
-  const userId = context.params.id // ✅ Modified
+export async function PATCH(
+  request: NextRequest, // ✅ Modified
+  context: { params: { id: string } }
+) {
+  const userId = context.params.id
 
   if (!userId) {
     return NextResponse.json({ error: "User id is required." }, { status: 400 })
@@ -62,7 +65,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update the user."
-    console.error(`/api/admin/users/${context.params.id} error:`, message)
+    console.error(`/api/admin/users/${userId} error:`, message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
