@@ -126,63 +126,38 @@ export default function SignupPage() {
         jobTitle: formData.jobTitle.trim(),
       }
 
-      // ✅ Check if organization already exists
-      const { data: existingOrg, error: orgCheckError } = await supabase
-        .from("organizations")
-        .select("id")
-        .eq("name", trimmedData.organizationName)
-        .maybeSingle()
+      const response = await fetch("/api/signup", { // ✅ Modified: Call new API route
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(trimmedData),
+      })
 
-      if (orgCheckError) throw new Error(orgCheckError.message)
-      if (existingOrg) {
+      const result = await response.json()
+
+      if (response.status === 409 && result?.error === "organization_exists") {
         setConflictingOrg(trimmedData.organizationName)
-        setShowOrgExistsModal(true) // ✅ Open modal
+        setShowOrgExistsModal(true)
         return
       }
 
-      // 🔐 Register user
-      // Data passed here goes into auth.users.raw_user_meta_data and is read by the SQL trigger function.
-      const userMetaData = {
-        first_name: trimmedData.firstName,
-        last_name: trimmedData.lastName,
-        job_title: trimmedData.jobTitle || null,
-        role: "org_admin", // ✅ Added: Set profile role for server-side function
-        authorized: false,
+      if (response.status === 409 && result?.error === "user_exists") {
+        setErrors({ general: result?.message ?? "A user with this email already exists." })
+        return
       }
 
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      if (!response.ok) {
+        throw new Error(result?.error ?? result?.message ?? "Failed to complete signup.")
+      }
+      
+      // ✅ Added: Sign user in after successful server-side creation
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedData.email,
         password: trimmedData.password,
-        options: {
-          data: userMetaData, // ✅ Added: Pass user profile data to trigger function
-        }
       })
-      if (signUpError) throw new Error(signUpError.message)
 
-      const user = signUpData.user
-      if (!user) throw new Error("User registration failed.")
-
-      // ❌ Removed client-side profile insert/update as it's now handled by the database trigger
-      // using the data passed above.
-
-      // ✅ Create organization
-      const { data: organizationData, error: organizationError } = await supabase
-        .from("organizations")
-        .insert({ name: trimmedData.organizationName })
-        .select("id")
-        .single()
-      if (organizationError) throw new Error(organizationError.message)
-
-      const organizationId = organizationData?.id
-      if (!organizationId) throw new Error("Organization creation failed.")
-
-      // ✅ Link user to org
-      const { error: organizationUserError } = await supabase.from("organization_users").insert({
-        user_id: user.id,
-        organization_id: organizationId,
-        role: "admin",
-      })
-      if (organizationUserError) throw new Error(organizationUserError.message)
+      if (signInError) {
+        throw new Error(signInError.message)
+      }
 
       // 🚦 Redirect to access pending
       router.push("/access-pending")
