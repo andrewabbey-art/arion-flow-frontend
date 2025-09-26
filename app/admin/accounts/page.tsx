@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, ChangeEvent } from "react" // ✅ Modified
 import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Trash2, UserPlus } from "lucide-react"
+import { Trash2, UserPlus, Edit, Save, X } from "lucide-react" // ✅ Modified
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -64,34 +64,30 @@ export default function AccountManagementPage() {
   const [newPhone, setNewPhone] = useState("")
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
+  
+  // ✅ Added state for editing
+  const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const [editedUserData, setEditedUserData] = useState<Partial<UserWithOrg> | null>(null)
 
-  // ✅ fetch users from the new view
   const fetchUsers = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from("user_accounts") // ✅ Changed from profiles
-      .select("*")
-
+    const { data, error } = await supabase.from("user_accounts").select("*")
     if (!error && data) {
       setUsers(data as UserWithOrg[])
     }
     setLoading(false)
   }, [supabase])
 
-  // ✅ fetch roles
   const fetchRoles = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("roles")
-      .select("key, description")
+    const { data, error } = await supabase.from("roles").select("key, description")
     if (!error && data) {
       setRoles(data as Role[])
     }
   }, [supabase])
 
-  // ✅ fetch organizations using the new admin API
-  const fetchOrganizations = useCallback(async () => { // ✅ Modified
+  const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/organizations") // ✅ Modified
+      const response = await fetch("/api/admin/organizations")
       const payload = (await response.json().catch(() => ({}))) as {
         data?: Organization[]
         error?: string
@@ -112,10 +108,9 @@ export default function AccountManagementPage() {
       console.error(message)
       alert(message)
     }
-  }, []) // ✅ Removed supabase/selectedOrgId dependency
+  }, [])
 
-  // ✅ New centralized profile update function using the privileged API
-  const updateProfile = useCallback( // ✅ Added
+  const updateProfile = useCallback(
     async (userId: string, updates: Partial<UserWithOrg>) => {
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
@@ -151,12 +146,12 @@ export default function AccountManagementPage() {
     value: boolean
   ) {
     try {
-      const data = await updateProfile(userId, { // ✅ Modified to use new API
+      const data = await updateProfile(userId, {
         [field]: value,
       } as Partial<UserWithOrg>)
 
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, ...data } : u)) // ✅ Update UI with returned data
+        prev.map((u) => (u.id === userId ? { ...u, ...data } : u))
       )
     } catch (error) {
       const message =
@@ -167,7 +162,7 @@ export default function AccountManagementPage() {
 
   async function updateRole(userId: string, role: string) {
     try {
-      const data = await updateProfile(userId, { role }) // ✅ Modified to use new API
+      const data = await updateProfile(userId, { role })
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, ...data } : u))
       )
@@ -180,7 +175,6 @@ export default function AccountManagementPage() {
 
   async function deleteUser(userId: string) {
     if (confirm("Are you sure you want to delete this user?")) {
-      // Assuming delete_user_and_profile RPC is correctly configured to use service role permissions
       const { error } = await supabase.rpc("delete_user_and_profile", {
         user_id_to_delete: userId,
       })
@@ -236,6 +230,49 @@ export default function AccountManagementPage() {
       setNewRole("workspace_user")
       setOpenAdd(false)
       fetchUsers()
+    }
+  }
+
+  // ✅ Added edit functionality handlers
+  const handleEdit = (user: UserWithOrg) => {
+    setEditingUserId(user.id)
+    setEditedUserData(user)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingUserId(null)
+    setEditedUserData(null)
+  }
+
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    if (editedUserData) {
+      setEditedUserData({ ...editedUserData, [name]: value })
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingUserId || !editedUserData) return
+
+    try {
+      const updates = {
+        first_name: editedUserData.first_name,
+        last_name: editedUserData.last_name,
+        job_title: editedUserData.job_title,
+        phone: editedUserData.phone,
+      }
+      const data = await updateProfile(editingUserId, updates)
+
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === editingUserId ? { ...user, ...data } : user
+        )
+      )
+      handleCancelEdit()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "An unknown error occurred."
+      alert(`Error updating user: ${message}`)
     }
   }
 
@@ -345,48 +382,114 @@ export default function AccountManagementPage() {
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id}>
-                  <TableCell>
-                    {u.first_name} {u.last_name}
-                  </TableCell>
-                  <TableCell>{u.email}</TableCell>
-                  <TableCell>{u.organization_name || "—"}</TableCell>
-                  <TableCell>{u.job_title || "—"}</TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={u.authorized}
-                      onCheckedChange={(val) =>
-                        toggleField(u.id, "authorized", val)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <select
-                      className="rounded border px-2 py-1 text-sm"
-                      value={u.role || ""}
-                      onChange={(e) => updateRole(u.id, e.target.value)}
-                    >
-                      <option value="">—</option>
-                      {roles.map((r) => (
-                        <option key={r.key} value={r.key}>
-                          {r.key}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell>
-                    {u.last_login
-                      ? new Date(u.last_login).toLocaleString()
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deleteUser(u.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+                  {/* ✅ Modified: Render inputs if editing */}
+                  {editingUserId === u.id ? (
+                    <>
+                      <TableCell>
+                        <Input
+                          name="first_name"
+                          value={editedUserData?.first_name || ""}
+                          onChange={handleInputChange}
+                        />
+                      </TableCell>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>{u.organization_name || "—"}</TableCell>
+                      <TableCell>
+                        <Input
+                          name="job_title"
+                          value={editedUserData?.job_title || ""}
+                          onChange={handleInputChange}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={editedUserData?.authorized || false}
+                          onCheckedChange={(val) =>
+                            setEditedUserData((prev) => ({ ...prev, authorized: val }))
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          className="rounded border px-2 py-1 text-sm"
+                          value={editedUserData?.role || ""}
+                          onChange={(e) =>
+                            setEditedUserData((prev) => ({ ...prev, role: e.target.value }))
+                          }
+                        >
+                          <option value="">—</option>
+                          {roles.map((r) => (
+                            <option key={r.key} value={r.key}>
+                              {r.key}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                      <TableCell>
+                        {u.last_login ? new Date(u.last_login).toLocaleString() : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={handleSaveEdit}>
+                            <Save className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={handleCancelEdit}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell>
+                        {u.first_name} {u.last_name}
+                      </TableCell>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>{u.organization_name || "—"}</TableCell>
+                      <TableCell>{u.job_title || "—"}</TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={u.authorized}
+                          onCheckedChange={(val) =>
+                            toggleField(u.id, "authorized", val)
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          className="rounded border px-2 py-1 text-sm"
+                          value={u.role || ""}
+                          onChange={(e) => updateRole(u.id, e.target.value)}
+                        >
+                          <option value="">—</option>
+                          {roles.map((r) => (
+                            <option key={r.key} value={r.key}>
+                              {r.key}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                      <TableCell>
+                        {u.last_login
+                          ? new Date(u.last_login).toLocaleString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => handleEdit(u)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteUser(u.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
