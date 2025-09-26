@@ -1,6 +1,4 @@
-"use client"
-
-import { useEffect, useState, useCallback, ChangeEvent } from "react" // ✅ Added ChangeEvent
+import { useEffect, useState, useCallback, ChangeEvent } from "react" 
 import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -21,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Trash2, UserPlus, Save, X, Edit2 } from "lucide-react" // ✅ Added Save, X, Edit2
+import { Trash2, UserPlus, Save, X, Edit2 } from "lucide-react" 
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -64,7 +62,7 @@ export default function AccountManagementPage() {
   const [newPhone, setNewPhone] = useState("")
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
-  const [isOrgSelectionLocked, setIsOrgSelectionLocked] = useState(false) // ✅ Added
+  const [isOrgSelectionLocked, setIsOrgSelectionLocked] = useState(false) 
     
   // ✅ Added state for editing
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -86,14 +84,13 @@ export default function AccountManagementPage() {
     }
   }, [supabase])
 
-  // ✅ Modified to fetch organizations from API route to handle filtering
   const fetchOrganizations = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/organizations")
       const payload = (await response.json().catch(() => ({}))) as {
         data?: Organization[]
         error?: string
-        meta?: { selectionLocked?: boolean } // ✅ Added
+        meta?: { selectionLocked?: boolean } 
       }
 
       if (!response.ok) {
@@ -102,7 +99,7 @@ export default function AccountManagementPage() {
 
       const organizationsData = payload.data ?? []
       setOrganizations(organizationsData)
-      setIsOrgSelectionLocked(Boolean(payload.meta?.selectionLocked)) // ✅ Added
+      setIsOrgSelectionLocked(Boolean(payload.meta?.selectionLocked)) 
       setSelectedOrgId((current) => {
         if (!current || !organizationsData.some((org) => org.id === current)) {
           return organizationsData[0]?.id ?? ""
@@ -115,10 +112,10 @@ export default function AccountManagementPage() {
       console.error(message)
       alert(message)
     }
-  }, []) // Dependencies removed as API handles user context internally
+  }, []) 
 
   const updateProfile = useCallback(
-    async (userId: string, updates: Partial<UserWithOrg>) => { // ✅ Added
+    async (userId: string, updates: Partial<UserWithOrg>) => { 
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
         headers: {
@@ -200,8 +197,8 @@ export default function AccountManagementPage() {
       return
     }
 
-    if (!selectedOrgId) { // ✅ Added
-      alert("Organization selection is required.") // ✅ Modified
+    if (!selectedOrgId) { 
+      alert("Organization selection is required.") 
       return
     }
 
@@ -244,6 +241,20 @@ export default function AccountManagementPage() {
       fetchUsers()
     }
   }
+
+  // ✅ Added logic to filter roles based on current user's privileges
+  const restrictedRoles = ["arion_admin"] 
+
+  const availableNewRoles = roles.filter((r) => 
+    isOrgSelectionLocked ? !restrictedRoles.includes(r.key) : true
+  ) // ✅ Added
+
+  // Enforce default role update if the previous one is restricted
+  useEffect(() => { // ✅ Added
+    if (isOrgSelectionLocked && newRole === "arion_admin") {
+      setNewRole("workspace_user")
+    }
+  }, [isOrgSelectionLocked, newRole])
 
   // ✅ Added edit functionality handlers
   const handleEdit = (user: UserWithOrg) => {
@@ -343,10 +354,10 @@ export default function AccountManagementPage() {
 
                 {/* ✅ Organization dropdown */}
                 <select
-                  className="w-full rounded border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" // ✅ Modified
+                  className="w-full rounded border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" 
                   value={selectedOrgId}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
-                  disabled={isOrgSelectionLocked || organizations.length <= 1} // ✅ Modified: Disable if locked or only one option
+                  disabled={isOrgSelectionLocked || organizations.length <= 1} 
                 >
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
@@ -355,13 +366,13 @@ export default function AccountManagementPage() {
                   ))}
                 </select>
 
-                {/* Role dropdown */}
+                {/* Role dropdown: Use filtered roles (availableNewRoles) */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value)}
                 >
-                  {roles.map((r) => (
+                  {availableNewRoles.map((r) => ( // ✅ Modified
                     <option key={r.key} value={r.key}>
                       {r.key}
                     </option>
@@ -431,10 +442,10 @@ export default function AccountManagementPage() {
                       </TableCell>
                       <TableCell>
                         <Switch
-                          checked={Boolean(editedUserData.authorized)} // ✅ Modified
+                          checked={Boolean(editedUserData.authorized)} 
                           onCheckedChange={(val) =>
                             setEditedUserData((prev) =>
-                              prev ? { ...prev, authorized: val } : prev // ✅ Modified
+                              prev ? { ...prev, authorized: val } : prev 
                             )
                           }
                         />
@@ -445,12 +456,13 @@ export default function AccountManagementPage() {
                           value={editedUserData.role || ""}
                           onChange={(e) =>
                             setEditedUserData((prev) =>
-                              prev ? { ...prev, role: e.target.value } : prev // ✅ Modified
+                              prev ? { ...prev, role: e.target.value } : prev 
                             )
                           }
                         >
                           <option value="">—</option>
-                          {roles.map((r) => (
+                          {/* Use filtered roles for editing */}
+                          {availableNewRoles.map((r) => ( // ✅ Modified
                             <option key={r.key} value={r.key}>
                               {r.key}
                             </option>
@@ -494,11 +506,21 @@ export default function AccountManagementPage() {
                           onChange={(e) => updateRole(u.id, e.target.value)}
                         >
                           <option value="">—</option>
-                          {roles.map((r) => (
-                            <option key={r.key} value={r.key}>
+                          {/* Use filtered roles for quick update */}
+                          {availableNewRoles.map((r) => ( // ✅ Modified
+                            <option 
+                                key={r.key} 
+                                value={r.key}
+                            >
                               {r.key}
                             </option>
                           ))}
+                           {/* If the current user has a restricted role, show it as selected value but don't include it in options (options are restricted) */}
+                          {u.role && restrictedRoles.includes(u.role) && !availableNewRoles.some(r => r.key === u.role) && (
+                              <option key={u.role} value={u.role} disabled>
+                                  {u.role} (Current)
+                              </option>
+                          )}
                         </select>
                       </TableCell>
                       <TableCell>

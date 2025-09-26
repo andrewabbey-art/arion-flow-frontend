@@ -53,13 +53,20 @@ export async function POST(req: Request) {
     }
     
     // Get Admin client for internal checks and the user invite
-    const supabaseAdmin = createClient( // ✅ Modified to get admin client here
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    if (
+      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      throw new Error("Server misconfigured: missing Supabase env vars")
+    }
+    
+    const supabaseAdmin = createClient( 
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     )
     
     // Use Admin client to bypass RLS and reliably get the current user's role
-    const { data: profile, error: profileError } = await supabaseAdmin // ✅ Modified
+    const { data: profile, error: profileError } = await supabaseAdmin 
       .from("profiles")
       .select("role")
       .eq("id", session.user.id)
@@ -70,15 +77,18 @@ export async function POST(req: Request) {
     }
 
     const normalizedRole = profile?.role?.trim().toLowerCase()
+    const isOrgAdmin = normalizedRole === "org_admin" // ✅ Added
 
-    if (
-      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      !process.env.SUPABASE_SERVICE_ROLE_KEY
-    ) {
-      throw new Error("Server misconfigured: missing Supabase env vars")
+    // ✅ Added: Server-side security check: org_admin cannot invite arion_admin
+    const role = body.role ?? "workspace_user"
+    if (isOrgAdmin && role === "arion_admin") { // ✅ Added
+      return NextResponse.json(
+        { error: "You do not have permission to assign the 'arion_admin' role." },
+        { status: 403 }
+      )
     }
-
-    // The Admin client was already initialized above, reusing it.
+    
+    // The role validation is complete. Continue with other data processing.
 
     // ✅ Changed: We now separate profile metadata from organization details.
     // Only data intended for the 'profiles' table should be in the user's metadata.
@@ -87,15 +97,15 @@ export async function POST(req: Request) {
     const jobTitle = body.job_title?.trim() ?? ""
     const phone = body.phone?.trim() ?? ""
     const authorized = body.authorized ?? false
-    const role = body.role ?? "workspace_user"
+    // const role is already determined above
 
     const trimmedBodyOrgId = body.organization_id?.trim()
 
     let targetOrgId = trimmedBodyOrgId
 
-    if (normalizedRole === "org_admin") {
+    if (isOrgAdmin) {
       // Use Admin client to bypass RLS and reliably check the current user's allowed organizations
-      const { data: memberships, error: membershipsError } = await supabaseAdmin // ✅ Modified
+      const { data: memberships, error: membershipsError } = await supabaseAdmin 
         .from("organization_users")
         .select("organization_id")
         .eq("user_id", session.user.id)
