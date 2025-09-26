@@ -1,3 +1,5 @@
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
@@ -32,6 +34,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "email is required" }, { status: 400 })
     }
 
+    const cookieStore = cookies() 
+    const supabaseClient = createRouteHandlerClient({
+      cookies: () => cookieStore,
+    })
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabaseClient.auth.getSession()
+
+    if (sessionError) {
+      throw sessionError
+    }
+
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    
+    // Get Admin client for internal checks and the user invite
+    const supabaseAdmin = createClient( // ✅ Modified to get admin client here
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    // Use Admin client to bypass RLS and reliably get the current user's role
+    const { data: profile, error: profileError } = await supabaseAdmin // ✅ Modified
+      .from("profiles")
+      .select("role")
+      .eq("id", session.user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      throw profileError
+    }
+
+    const normalizedRole = profile?.role?.trim().toLowerCase()
+
     if (
       !process.env.NEXT_PUBLIC_SUPABASE_URL ||
       !process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -39,10 +78,7 @@ export async function POST(req: Request) {
       throw new Error("Server misconfigured: missing Supabase env vars")
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
+    // The Admin client was already initialized above, reusing it.
 
     // ✅ Changed: We now separate profile metadata from organization details.
     // Only data intended for the 'profiles' table should be in the user's metadata.
@@ -52,6 +88,44 @@ export async function POST(req: Request) {
     const phone = body.phone?.trim() ?? ""
     const authorized = body.authorized ?? false
     const role = body.role ?? "workspace_user"
+
+    const trimmedBodyOrgId = body.organization_id?.trim()
+
+    let targetOrgId = trimmedBodyOrgId
+
+    if (normalizedRole === "org_admin") {
+      // Use Admin client to bypass RLS and reliably check the current user's allowed organizations
+      const { data: memberships, error: membershipsError } = await supabaseAdmin // ✅ Modified
+        .from("organization_users")
+        .select("organization_id")
+        .eq("user_id", session.user.id)
+
+      if (membershipsError) {
+        throw membershipsError
+      }
+
+      const allowedOrgIds = (memberships ?? [])
+        .map((record) => record.organization_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+
+      if (allowedOrgIds.length === 0) {
+        return NextResponse.json(
+          { error: "You are not assigned to any organizations." },
+          { status: 403 }
+        )
+      }
+
+      // If an organization ID is provided in the request, ensure it's one the org_admin belongs to
+      if (targetOrgId && !allowedOrgIds.includes(targetOrgId)) {
+        return NextResponse.json(
+          { error: "You cannot invite users to this organization." },
+          { status: 403 }
+        )
+      }
+
+      // Default to the first allowed organization if none was provided (or if the one provided was validated)
+      targetOrgId = targetOrgId ?? allowedOrgIds[0]
+    }
 
     if (!firstName || !lastName) {
       return NextResponse.json(
@@ -79,38 +153,41 @@ export async function POST(req: Request) {
       // ✅ Added: Better error classification for the client
       if (inviteError.message.includes("User already registered")) {
         return NextResponse.json(
-          { error: "A user with this email address already exists." },
-          { status: 409 } // 409 Conflict is more appropriate here
+          { error: "User is already registered or invited." },
+          { status: 409, headers: { "Access-Control-Allow-Origin": "*" } }
         )
       }
-      throw inviteError
+
+      return NextResponse.json(
+        { error: inviteError.message },
+        { status: 500, headers: { "Access-Control-Allow-Origin": "*" } }
+      )
     }
 
-    const newUser = inviteData.user
+    const newUser = inviteData.user!
 
-    if (!newUser) {
-      throw new Error("User invitation did not return a user object.")
-    }
-
+    // The rest of the profile fields are created by a database trigger (or should be).
+    // We update the profile to ensure all custom fields are set.
     const profilePayload = {
       id: newUser.id,
       first_name: firstName,
       last_name: lastName,
-      job_title: jobTitle || null,
-      phone: phone || null,
+      job_title: jobTitle,
+      phone: phone,
       authorized,
       role,
     }
 
-    const { error: profileError } = await supabaseAdmin
+    const { error: profileErrorUpsert } = await supabaseAdmin 
       .from("profiles")
       .upsert(profilePayload, { onConflict: "id" })
 
-    if (profileError) {
+    if (profileErrorUpsert) {
       console.error(
         `Failed to create profile for invited user ${newUser.id}:`,
-        profileError
+        profileErrorUpsert 
       )
+      // Attempt to clean up the invited user from auth
       await supabaseAdmin.auth.admin.deleteUser(newUser.id)
 
       return NextResponse.json(
@@ -122,13 +199,13 @@ export async function POST(req: Request) {
       )
     }
 
-    // ✅ Step 2: If an organization ID is provided, link the new user to it.
-    if (body.organization_id) {
+    // ✅ Step 2: If an organization ID is available (either provided or defaulted for org_admin), link the new user to it.
+    if (targetOrgId) {
       const { error: orgLinkError } = await supabaseAdmin
         .from("organization_users")
         .insert({
           user_id: newUser.id,
-          organization_id: body.organization_id,
+          organization_id: targetOrgId,
           role: body.org_role || "member",
         })
 
@@ -137,7 +214,7 @@ export async function POST(req: Request) {
         // We should log this but not necessarily fail the whole request,
         // as the admin can link the user manually.
         console.error(
-          `Failed to link user ${newUser.id} to org ${body.organization_id}:`,
+          `Failed to link user ${newUser.id} to org ${targetOrgId}:`,
           orgLinkError
         )
         // Optionally, you could return a partial success message here.

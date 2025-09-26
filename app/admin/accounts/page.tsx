@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, ChangeEvent } from "react" // ✅ Modified
+import { useEffect, useState, useCallback, ChangeEvent } from "react" // ✅ Added ChangeEvent
 import { getSupabaseClient } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Trash2, UserPlus, Edit, Save, X } from "lucide-react" // ✅ Modified
+import { Trash2, UserPlus, Save, X, Edit2 } from "lucide-react" // ✅ Added Save, X, Edit2
 import { Label } from "@/components/ui/label"
 
 interface Role {
@@ -44,7 +44,7 @@ interface UserWithOrg {
   authorized: boolean
   last_login: string | null
   role: string | null
-  organization_name?: string | null // ✅ Added
+  organization_name?: string | null 
 }
 
 export default function AccountManagementPage() {
@@ -64,14 +64,15 @@ export default function AccountManagementPage() {
   const [newPhone, setNewPhone] = useState("")
   const [newAuthorized, setNewAuthorized] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState("")
-  
+  const [isOrgSelectionLocked, setIsOrgSelectionLocked] = useState(false) // ✅ Added
+    
   // ✅ Added state for editing
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [editedUserData, setEditedUserData] = useState<Partial<UserWithOrg> | null>(null)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase.from("user_accounts").select("*")
+    const { data, error } = await supabase.from("user_accounts").select("*") 
     if (!error && data) {
       setUsers(data as UserWithOrg[])
     }
@@ -85,12 +86,14 @@ export default function AccountManagementPage() {
     }
   }, [supabase])
 
+  // ✅ Modified to fetch organizations from API route to handle filtering
   const fetchOrganizations = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/organizations")
       const payload = (await response.json().catch(() => ({}))) as {
         data?: Organization[]
         error?: string
+        meta?: { selectionLocked?: boolean } // ✅ Added
       }
 
       if (!response.ok) {
@@ -99,19 +102,23 @@ export default function AccountManagementPage() {
 
       const organizationsData = payload.data ?? []
       setOrganizations(organizationsData)
-      if (organizationsData.length > 0) {
-        setSelectedOrgId((current) => current || organizationsData[0].id)
-      }
+      setIsOrgSelectionLocked(Boolean(payload.meta?.selectionLocked)) // ✅ Added
+      setSelectedOrgId((current) => {
+        if (!current || !organizationsData.some((org) => org.id === current)) {
+          return organizationsData[0]?.id ?? ""
+        }
+        return current
+      })
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to load organizations."
       console.error(message)
       alert(message)
     }
-  }, [])
+  }, []) // Dependencies removed as API handles user context internally
 
   const updateProfile = useCallback(
-    async (userId: string, updates: Partial<UserWithOrg>) => {
+    async (userId: string, updates: Partial<UserWithOrg>) => { // ✅ Added
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
         headers: {
@@ -128,7 +135,6 @@ export default function AccountManagementPage() {
       if (!response.ok) {
         throw new Error(payload.error || "Failed to update user.")
       }
-
       return payload.data
     },
     []
@@ -138,7 +144,7 @@ export default function AccountManagementPage() {
     fetchUsers()
     fetchRoles()
     fetchOrganizations()
-  }, [fetchUsers, fetchRoles, fetchOrganizations])
+  }, [fetchUsers, fetchRoles, fetchOrganizations]) 
 
   async function toggleField(
     userId: string,
@@ -146,17 +152,16 @@ export default function AccountManagementPage() {
     value: boolean
   ) {
     try {
-      const data = await updateProfile(userId, {
-        [field]: value,
-      } as Partial<UserWithOrg>)
-
+      const data = await updateProfile(userId, { [field]: value })
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, ...data } : u))
+        prev.map((user) =>
+          user.id === userId ? { ...user, ...data } : user
+        )
       )
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "An unknown error occurred."
-      alert(`Error updating user: ${message}`)
+      alert(`Error updating user status: ${message}`)
     }
   }
 
@@ -164,7 +169,9 @@ export default function AccountManagementPage() {
     try {
       const data = await updateProfile(userId, { role })
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, ...data } : u))
+        prev.map((user) =>
+          user.id === userId ? { ...user, ...data } : user
+        )
       )
     } catch (error) {
       const message =
@@ -190,6 +197,11 @@ export default function AccountManagementPage() {
   async function addUser() {
     if (!newEmail) {
       alert("Email is required.")
+      return
+    }
+
+    if (!selectedOrgId) { // ✅ Added
+      alert("Organization selection is required.") // ✅ Modified
       return
     }
 
@@ -255,12 +267,17 @@ export default function AccountManagementPage() {
     if (!editingUserId || !editedUserData) return
 
     try {
-      const updates = {
-        first_name: editedUserData.first_name,
-        last_name: editedUserData.last_name,
-        job_title: editedUserData.job_title,
-        phone: editedUserData.phone,
-      }
+      const updates = Object.fromEntries(
+        Object.entries({
+          first_name: editedUserData.first_name,
+          last_name: editedUserData.last_name,
+          job_title: editedUserData.job_title,
+          phone: editedUserData.phone,
+          authorized: editedUserData.authorized,
+          role: editedUserData.role,
+        }).filter(([, value]) => value !== undefined)
+      ) as Partial<UserWithOrg>
+
       const data = await updateProfile(editingUserId, updates)
 
       setUsers((prev) =>
@@ -299,22 +316,26 @@ export default function AccountManagementPage() {
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <Input
+                    name="first_name"
                     placeholder="First Name"
                     value={newFirstName}
                     onChange={(e) => setNewFirstName(e.target.value)}
                   />
                   <Input
+                    name="last_name"
                     placeholder="Last Name"
                     value={newLastName}
                     onChange={(e) => setNewLastName(e.target.value)}
                   />
                 </div>
                 <Input
+                  name="job_title"
                   placeholder="Job Title"
                   value={newJobTitle}
                   onChange={(e) => setNewJobTitle(e.target.value)}
                 />
                 <Input
+                  name="phone"
                   placeholder="Phone (Optional)"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
@@ -322,9 +343,10 @@ export default function AccountManagementPage() {
 
                 {/* ✅ Organization dropdown */}
                 <select
-                  className="w-full rounded border px-3 py-2 text-sm"
+                  className="w-full rounded border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60" // ✅ Modified
                   value={selectedOrgId}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
+                  disabled={isOrgSelectionLocked || organizations.length <= 1} // ✅ Modified: Disable if locked or only one option
                 >
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
@@ -355,7 +377,7 @@ export default function AccountManagementPage() {
                   <Label htmlFor="new-authorized">Authorized</Label>
                 </div>
 
-                <Button onClick={addUser} className="w-full">
+                <Button onClick={addUser} className="w-full" disabled={!selectedOrgId}>
                   Create
                 </Button>
               </div>
@@ -383,12 +405,18 @@ export default function AccountManagementPage() {
               {users.map((u) => (
                 <TableRow key={u.id}>
                   {/* ✅ Modified: Render inputs if editing */}
-                  {editingUserId === u.id ? (
+                  {editingUserId === u.id && editedUserData ? (
                     <>
                       <TableCell>
                         <Input
                           name="first_name"
-                          value={editedUserData?.first_name || ""}
+                          value={editedUserData.first_name || ""}
+                          onChange={handleInputChange}
+                          className="mb-1"
+                        />
+                        <Input
+                          name="last_name"
+                          value={editedUserData.last_name || ""}
                           onChange={handleInputChange}
                         />
                       </TableCell>
@@ -397,24 +425,28 @@ export default function AccountManagementPage() {
                       <TableCell>
                         <Input
                           name="job_title"
-                          value={editedUserData?.job_title || ""}
+                          value={editedUserData.job_title || ""}
                           onChange={handleInputChange}
                         />
                       </TableCell>
                       <TableCell>
                         <Switch
-                          checked={editedUserData?.authorized || false}
+                          checked={Boolean(editedUserData.authorized)} // ✅ Modified
                           onCheckedChange={(val) =>
-                            setEditedUserData((prev) => ({ ...prev, authorized: val }))
+                            setEditedUserData((prev) =>
+                              prev ? { ...prev, authorized: val } : prev // ✅ Modified
+                            )
                           }
                         />
                       </TableCell>
                       <TableCell>
                         <select
                           className="rounded border px-2 py-1 text-sm"
-                          value={editedUserData?.role || ""}
+                          value={editedUserData.role || ""}
                           onChange={(e) =>
-                            setEditedUserData((prev) => ({ ...prev, role: e.target.value }))
+                            setEditedUserData((prev) =>
+                              prev ? { ...prev, role: e.target.value } : prev // ✅ Modified
+                            )
                           }
                         >
                           <option value="">—</option>
@@ -476,8 +508,8 @@ export default function AccountManagementPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => handleEdit(u)}>
-                            <Edit className="h-4 w-4" />
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(u)}>
+                            <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
