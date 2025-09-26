@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
-
 import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs" // ✅ Added
+import { cookies } from "next/headers" // ✅ Added
+import type { PostgrestSingleResponse } from "@supabase/supabase-js"
+
+// Define types for strictness to resolve @typescript-eslint/no-explicit-any errors
+type ProfileUpdate = { // ✅ Added
+  first_name?: string
+  last_name?: string
+  job_title?: string | null
+  phone?: string | null
+  authorized?: boolean
+  role?: string
+}
+
+type ProfileData = { // ✅ Added
+  id: string
+  first_name: string | null
+  last_name: string | null
+  job_title: string | null
+  phone: string | null
+  authorized: boolean
+  role: string | null
+}
 
 const ALLOWED_FIELDS = new Set([
   "first_name",
@@ -17,8 +39,9 @@ type RouteContext = {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: RouteContext
+  context: RouteContext
 ) {
+  const { params } = context
   const { id: userId } = await params
 
   if (!userId) {
@@ -26,7 +49,39 @@ export async function PATCH(
   }
 
   try {
-    const body = (await request.json()) as Record<string, unknown>
+    const cookieStore = cookies() // ✅ Added
+    // Use RLS-aware client to check session
+    const supabaseClient = createRouteHandlerClient({ cookies: () => cookieStore }) // ✅ Added
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabaseClient.auth.getSession()
+
+    if (sessionError || !session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const supabaseAdmin = getSupabaseAdminClient()
+
+    // 1. Get invoker's role using the Admin client to bypass RLS
+    const { data: invokerProfile, error: invokerError } = await supabaseAdmin // ✅ Added
+      .from("profiles")
+      .select("role")
+      .eq("id", session.user.id)
+      .single()
+
+    if (invokerError || !invokerProfile) {
+      return NextResponse.json(
+        { error: "Unable to verify invoker role." },
+        { status: 403 }
+      )
+    }
+
+    const isOrgAdmin = invokerProfile.role === "org_admin"
+
+    // 2. Parse and validate fields
+    const body = await request.json()
     const updateEntries = Object.entries(body).filter(([field]) =>
       ALLOWED_FIELDS.has(field)
     )
@@ -38,15 +93,28 @@ export async function PATCH(
       )
     }
 
-    const updates = Object.fromEntries(updateEntries)
+    const updates = Object.fromEntries(updateEntries) as ProfileUpdate // ✅ Typed
 
-    const supabaseAdmin = getSupabaseAdminClient()
-    const { data, error } = await supabaseAdmin
+    // 3. Security Check: Prevent role elevation to 'arion_admin' by 'org_admin'
+    if (isOrgAdmin) { // ✅ Added
+      const newRole = updates.role?.trim().toLowerCase()
+
+      if (newRole === "arion_admin") { // ✅ Added
+        return NextResponse.json(
+          { error: "You do not have permission to assign the 'arion_admin' role." },
+          { status: 403 }
+        )
+      }
+    }
+
+    const response: PostgrestSingleResponse<ProfileData> = await supabaseAdmin
       .from("profiles")
       .update(updates)
       .eq("id", userId)
       .select()
       .single()
+
+    const { data, error } = response
 
     if (error) {
       throw error

@@ -245,6 +245,20 @@ export default function AccountManagementPage() {
     }
   }
 
+  // ✅ Added logic to filter roles based on current user's privileges
+  const restrictedRoles = ["arion_admin"] 
+
+  const availableNewRoles = roles.filter((r) => 
+    isOrgSelectionLocked ? !restrictedRoles.includes(r.key) : true
+  ) // ✅ Added: Filtered roles for org_admin
+
+  // Enforce default role update if the previous one is restricted
+  useEffect(() => { // ✅ Added
+    if (isOrgSelectionLocked && newRole === "arion_admin") {
+      setNewRole("workspace_user")
+    }
+  }, [isOrgSelectionLocked, newRole])
+
   // ✅ Added edit functionality handlers
   const handleEdit = (user: UserWithOrg) => {
     setEditingUserId(user.id)
@@ -355,13 +369,14 @@ export default function AccountManagementPage() {
                   ))}
                 </select>
 
-                {/* Role dropdown */}
+                {/* Role dropdown: Use filtered roles (availableNewRoles) */}
                 <select
                   className="w-full rounded border px-3 py-2 text-sm"
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value)}
                 >
-                  {roles.map((r) => (
+                  <option value="">—</option>
+                  {availableNewRoles.map((r) => ( // ✅ Modified
                     <option key={r.key} value={r.key}>
                       {r.key}
                     </option>
@@ -450,7 +465,8 @@ export default function AccountManagementPage() {
                           }
                         >
                           <option value="">—</option>
-                          {roles.map((r) => (
+                          {/* Use filtered roles for editing */}
+                          {availableNewRoles.map((r) => ( // ✅ Modified
                             <option key={r.key} value={r.key}>
                               {r.key}
                             </option>
@@ -494,11 +510,21 @@ export default function AccountManagementPage() {
                           onChange={(e) => updateRole(u.id, e.target.value)}
                         >
                           <option value="">—</option>
-                          {roles.map((r) => (
-                            <option key={r.key} value={r.key}>
+                          {/* Use filtered roles for quick update */}
+                          {availableNewRoles.map((r) => ( // ✅ Modified
+                            <option 
+                                key={r.key} 
+                                value={r.key}
+                            >
                               {r.key}
                             </option>
                           ))}
+                           {/* If the current user has a restricted role, show it as selected value but don't include it in options (options are restricted) */}
+                          {u.role && restrictedRoles.includes(u.role) && !availableNewRoles.some(r => r.key === u.role) && (
+                              <option key={u.role} value={u.role} disabled>
+                                  {u.role} (Current)
+                              </option>
+                          )}
                         </select>
                       </TableCell>
                       <TableCell>
