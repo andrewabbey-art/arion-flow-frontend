@@ -7,14 +7,15 @@ import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
 export async function GET() {
   try {
     const cookieStore = cookies()
-    const supabase = createRouteHandlerClient({
+    // Use RLS-aware client to get the session only
+    const supabaseClient = createRouteHandlerClient({
       cookies: () => cookieStore,
     })
 
     const {
       data: { session },
       error: sessionError,
-    } = await supabase.auth.getSession()
+    } = await supabaseClient.auth.getSession()
 
     if (sessionError) {
       throw sessionError
@@ -24,7 +25,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const supabaseAdmin = getSupabaseAdminClient() // ✅ Get Admin client here
+
+    // Use Admin client to bypass RLS and reliably get the current user's role
+    const { data: profile, error: profileError } = await supabaseAdmin // ✅ Modified
       .from("profiles")
       .select("role")
       .eq("id", session.user.id)
@@ -35,12 +39,13 @@ export async function GET() {
     }
 
     const normalizedRole = profile?.role?.trim().toLowerCase()
-    const isOrgAdmin = normalizedRole === "org_admin" // ✅ Added
+    const isOrgAdmin = normalizedRole === "org_admin"
 
     let organizationFilter: string[] | null = null
 
-    if (isOrgAdmin) { // ✅ Added: Filter organizations for org_admin
-      const { data: memberships, error: membershipsError } = await supabase
+    if (isOrgAdmin) {
+      // Use Admin client to bypass RLS and reliably get the current user's organization memberships
+      const { data: memberships, error: membershipsError } = await supabaseAdmin // ✅ Modified
         .from("organization_users")
         .select("organization_id")
         .eq("user_id", session.user.id)
@@ -63,12 +68,11 @@ export async function GET() {
       }
     }
 
-    const supabaseAdmin = getSupabaseAdminClient()
-
+    // Final query already uses Admin client
     let query = supabaseAdmin.from("organizations").select("id, name")
 
     if (organizationFilter) {
-      query = query.in("id", organizationFilter) // ✅ Added: Apply filter
+      query = query.in("id", organizationFilter)
     }
 
     const { data, error } = await query.order("name")
@@ -79,7 +83,7 @@ export async function GET() {
 
     return NextResponse.json({
       data: data ?? [],
-      meta: { selectionLocked: isOrgAdmin }, // ✅ Added: Pass lock status to client
+      meta: { selectionLocked: isOrgAdmin },
     })
   } catch (error) {
     const message =

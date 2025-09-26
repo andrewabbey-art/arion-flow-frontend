@@ -34,35 +34,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "email is required" }, { status: 400 })
     }
 
-    const cookieStore = cookies() // ✅ Added
-    const supabase = createRouteHandlerClient({ // ✅ Added
+    const cookieStore = cookies() 
+    const supabaseClient = createRouteHandlerClient({
       cookies: () => cookieStore,
     })
 
-    const { // ✅ Added
+    const {
       data: { session },
       error: sessionError,
-    } = await supabase.auth.getSession()
+    } = await supabaseClient.auth.getSession()
 
-    if (sessionError) { // ✅ Added
+    if (sessionError) {
       throw sessionError
     }
 
-    if (!session?.user) { // ✅ Added
+    if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-
-    const { data: profile, error: profileError } = await supabase // ✅ Added
+    
+    // Get Admin client for internal checks and the user invite
+    const supabaseAdmin = createClient( // ✅ Modified to get admin client here
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    // Use Admin client to bypass RLS and reliably get the current user's role
+    const { data: profile, error: profileError } = await supabaseAdmin // ✅ Modified
       .from("profiles")
       .select("role")
       .eq("id", session.user.id)
       .maybeSingle()
 
-    if (profileError) { // ✅ Added
+    if (profileError) {
       throw profileError
     }
 
-    const normalizedRole = profile?.role?.trim().toLowerCase() // ✅ Added
+    const normalizedRole = profile?.role?.trim().toLowerCase()
 
     if (
       !process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -71,10 +78,7 @@ export async function POST(req: Request) {
       throw new Error("Server misconfigured: missing Supabase env vars")
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
+    // The Admin client was already initialized above, reusing it.
 
     // ✅ Changed: We now separate profile metadata from organization details.
     // Only data intended for the 'profiles' table should be in the user's metadata.
@@ -85,12 +89,13 @@ export async function POST(req: Request) {
     const authorized = body.authorized ?? false
     const role = body.role ?? "workspace_user"
 
-    const trimmedBodyOrgId = body.organization_id?.trim() // ✅ Added
+    const trimmedBodyOrgId = body.organization_id?.trim()
 
-    let targetOrgId = trimmedBodyOrgId // ✅ Added
+    let targetOrgId = trimmedBodyOrgId
 
-    if (normalizedRole === "org_admin") { // ✅ Added: Enforce organization restriction for org_admin
-      const { data: memberships, error: membershipsError } = await supabase
+    if (normalizedRole === "org_admin") {
+      // Use Admin client to bypass RLS and reliably check the current user's allowed organizations
+      const { data: memberships, error: membershipsError } = await supabaseAdmin // ✅ Modified
         .from("organization_users")
         .select("organization_id")
         .eq("user_id", session.user.id)
@@ -195,12 +200,12 @@ export async function POST(req: Request) {
     }
 
     // ✅ Step 2: If an organization ID is available (either provided or defaulted for org_admin), link the new user to it.
-    if (targetOrgId) { // ✅ Modified
+    if (targetOrgId) {
       const { error: orgLinkError } = await supabaseAdmin
         .from("organization_users")
         .insert({
           user_id: newUser.id,
-          organization_id: targetOrgId, // ✅ Modified
+          organization_id: targetOrgId,
           role: body.org_role || "member",
         })
 
@@ -209,7 +214,7 @@ export async function POST(req: Request) {
         // We should log this but not necessarily fail the whole request,
         // as the admin can link the user manually.
         console.error(
-          `Failed to link user ${newUser.id} to org ${targetOrgId}:`, // ✅ Modified
+          `Failed to link user ${newUser.id} to org ${targetOrgId}:`,
           orgLinkError
         )
         // Optionally, you could return a partial success message here.
