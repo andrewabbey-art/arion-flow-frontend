@@ -1,15 +1,15 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
-import { redirect } from "next/navigation"
-import type { ReactNode } from "react"
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs" // ✅ Added
+import { cookies } from "next/headers" // ✅ Added
+import { redirect } from "next/navigation" // ✅ Added
+import type { ReactNode } from "react" // ✅ Added
 
-// A robust interface that handles nullable return values from the RPC.
-interface UserAccess {
-  authorized: boolean | null
-  role: string | null
-}
+// A robust interface that handles nullable return values from the database.
+interface UserAccess { // ✅ Added
+  authorized: boolean | null // ✅ Added
+  role: string | null // ✅ Added
+} // ✅ Added
 
-export default async function AdminLayout({ children }: { children: ReactNode }) {
+export default async function AdminLayout({ children }: { children: ReactNode }) { // ✅ Modified to be an async Server Component
   const supabase = createServerComponentClient({ cookies })
   const {
     data: { session },
@@ -19,10 +19,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/login")
   }
 
-  // Uses maybeSingle<UserAccess>() for better type inference with potentially null data.
-  const { data: access, error } = await supabase
-    .rpc("get_user_access")
-    .maybeSingle<UserAccess>()
+  // Uses server-side query to get the freshest profile data, bypassing client-side state issues.
+  const { data: access, error } = await supabase // ✅ Modified to use from().select() instead of rpc()
+    .from("profiles") // ✅ Added
+    .select("authorized, role") // ✅ Added
+    .eq("id", session.user.id) // ✅ Added
+    .maybeSingle<UserAccess>() // ✅ Modified to use maybeSingle with generic type
 
   // Explicit normalization and checks for role and authorization status.
   // This is safer and prevents runtime errors if 'access' is null.
@@ -35,6 +37,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const isAuthorized = Boolean(access?.authorized)
 
+  // Redirect if any core permission or authorization check fails
   if (error || !isAuthorized || !isAllowedRole) {
     redirect("/access-pending")
   }
