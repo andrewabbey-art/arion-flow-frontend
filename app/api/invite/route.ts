@@ -1,23 +1,73 @@
 import { NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
 
-import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
+type InviteRequestBody = {
+  email?: string
+  first_name?: string
+  last_name?: string
+  job_title?: string
+  phone?: string
+  authorized?: boolean
+  role?: string
+  organization_id?: string
+  org_role?: string
+}
+
+export async function OPTIONS() {
+  return NextResponse.json({}, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  })
+}
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
-    const { email, userMetadata } = body
+    const body: InviteRequestBody = await req.json()
+    const email = body.email?.trim()
 
-    if (!email || !userMetadata) {
+    if (!email) {
+      return NextResponse.json({ error: "email is required" }, { status: 400 })
+    }
+
+    if (
+      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      throw new Error("Server misconfigured: missing Supabase env vars")
+    }
+
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
+
+    // ✅ Changed: We now separate profile metadata from organization details.
+    // Only data intended for the 'profiles' table should be in the user's metadata.
+    const firstName = body.first_name?.trim() ?? ""
+    const lastName = body.last_name?.trim() ?? ""
+    const jobTitle = body.job_title?.trim() ?? ""
+    const phone = body.phone?.trim() ?? ""
+    const authorized = body.authorized ?? false
+    const role = body.role ?? "workspace_user"
+
+    if (!firstName || !lastName) {
       return NextResponse.json(
-        { error: "Email and user metadata are required." },
-        {
-          status: 400,
-          headers: { "Access-Control-Allow-Origin": "*" },
-        }
+        { error: "first_name and last_name are required" },
+        { status: 400 }
       )
     }
 
-    const supabaseAdmin = getSupabaseAdminClient()
+    const userMetadata: Record<string, unknown> = {
+      role,
+      authorized,
+      first_name: firstName,
+      last_name: lastName,
+      job_title: jobTitle,
+      phone,
+    }
 
     // ✅ Step 1: Invite the user with only their profile metadata.
     const { data: inviteData, error: inviteError } =
@@ -44,12 +94,12 @@ export async function POST(req: Request) {
 
     const profilePayload = {
       id: newUser.id,
-      first_name: userMetadata.first_name,
-      last_name: userMetadata.last_name,
-      job_title: (userMetadata.job_title as string | null) ?? null,
-      phone: (userMetadata.phone as string | null) ?? null,
-      authorized: typeof body.authorized === "boolean" ? body.authorized : false,
-      role: body.role ?? "workspace_user",
+      first_name: firstName,
+      last_name: lastName,
+      job_title: jobTitle || null,
+      phone: phone || null,
+      authorized,
+      role,
     }
 
     const { error: profileError } = await supabaseAdmin
