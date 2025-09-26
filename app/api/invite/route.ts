@@ -1,66 +1,23 @@
-// ✅ Changed: This file has been updated to correctly handle user invitations
-// and link them to organizations in a two-step process to prevent database errors.
-
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 
-interface InviteRequestBody {
-  email?: string
-  first_name?: string
-  last_name?: string
-  job_title?: string
-  phone?: string
-  role?: string
-  authorized?: boolean
-  organization_id?: string
-  org_role?: string
-}
-
-export async function OPTIONS() {
-  return NextResponse.json(
-    { ok: true },
-    {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers":
-          "authorization, x-client-info, apikey, content-type",
-      },
-    }
-  )
-}
+import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
 
 export async function POST(req: Request) {
   try {
-    const body: InviteRequestBody = await req.json()
-    const email = body.email?.trim()
+    const body = await req.json()
+    const { email, userMetadata } = body
 
-    if (!email) {
-      return NextResponse.json({ error: "email is required" }, { status: 400 })
+    if (!email || !userMetadata) {
+      return NextResponse.json(
+        { error: "Email and user metadata are required." },
+        {
+          status: 400,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        }
+      )
     }
 
-    if (
-      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      !process.env.SUPABASE_SERVICE_ROLE_KEY
-    ) {
-      throw new Error("Server misconfigured: missing Supabase env vars")
-    }
-
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
-
-    // ✅ Changed: We now separate profile metadata from organization details.
-    // Only data intended for the 'profiles' table should be in the user's metadata.
-    const userMetadata: Record<string, unknown> = {
-      role: body.role,
-      authorized: body.authorized,
-      first_name: body.first_name?.trim() || "",
-      last_name: body.last_name?.trim() || "",
-      job_title: body.job_title?.trim() || null,
-      phone: body.phone?.trim() || null,
-    }
+    const supabaseAdmin = getSupabaseAdminClient()
 
     // ✅ Step 1: Invite the user with only their profile metadata.
     const { data: inviteData, error: inviteError } =
@@ -85,6 +42,36 @@ export async function POST(req: Request) {
       throw new Error("User invitation did not return a user object.")
     }
 
+    const profilePayload = {
+      id: newUser.id,
+      first_name: userMetadata.first_name,
+      last_name: userMetadata.last_name,
+      job_title: (userMetadata.job_title as string | null) ?? null,
+      phone: (userMetadata.phone as string | null) ?? null,
+      authorized: typeof body.authorized === "boolean" ? body.authorized : false,
+      role: body.role ?? "workspace_user",
+    }
+
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .upsert(profilePayload, { onConflict: "id" })
+
+    if (profileError) {
+      console.error(
+        `Failed to create profile for invited user ${newUser.id}:`,
+        profileError
+      )
+      await supabaseAdmin.auth.admin.deleteUser(newUser.id)
+
+      return NextResponse.json(
+        { error: "Failed to create profile for invited user." },
+        {
+          status: 500,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        }
+      )
+    }
+
     // ✅ Step 2: If an organization ID is provided, link the new user to it.
     if (body.organization_id) {
       const { error: orgLinkError } = await supabaseAdmin
@@ -99,7 +86,10 @@ export async function POST(req: Request) {
         // This is a secondary error. The user was invited, but linking failed.
         // We should log this but not necessarily fail the whole request,
         // as the admin can link the user manually.
-        console.error(`Failed to link user ${newUser.id} to org ${body.organization_id}:`, orgLinkError)
+        console.error(
+          `Failed to link user ${newUser.id} to org ${body.organization_id}:`,
+          orgLinkError
+        )
         // Optionally, you could return a partial success message here.
       }
     }
@@ -110,18 +100,14 @@ export async function POST(req: Request) {
         headers: { "Access-Control-Allow-Origin": "*" },
       }
     )
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "An unknown error occurred."
-    
-    // ✅ Added: Log the detailed error on the server for debugging
-    console.error("Error in /api/invite:", errorMessage)
-    
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Unexpected error during invite."
+    console.error("Invite API error:", message)
     return NextResponse.json(
-      // ✅ Changed: Provide a clearer error message to the user
-      { error: `Failed to invite user: ${errorMessage}` },
+      { error: message },
       {
-        status: 400,
+        status: 500,
         headers: { "Access-Control-Allow-Origin": "*" },
       }
     )
