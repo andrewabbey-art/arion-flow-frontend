@@ -1,0 +1,24 @@
+// lib/supabaseAdminClient.ts
+
+import { createClient, SupabaseClient } from "@supabase/supabase-js"
+
+let supabaseAdmin: SupabaseClient | null = null
+
+export function getSupabaseAdminClient(): SupabaseClient { // <-- New function name
+  if (!supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY // <-- Uses the high-privilege SERVICE ROLE KEY
+
+    if (!url || !serviceKey) {
+      throw new Error("Supabase admin client misconfigured: missing URL or service role key")
+    }
+
+    supabaseAdmin = createClient(url, serviceKey, {
+      auth: {
+        persistSession: false,
+      },
+    })
+  }
+
+  return supabaseAdmin
+}
