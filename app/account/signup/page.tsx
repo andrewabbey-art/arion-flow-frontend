@@ -141,51 +141,29 @@ export default function SignupPage() {
       }
 
       // 🔐 Register user
+      // Data passed here goes into auth.users.raw_user_meta_data and is read by the SQL trigger function.
+      const userMetaData = {
+        first_name: trimmedData.firstName,
+        last_name: trimmedData.lastName,
+        job_title: trimmedData.jobTitle || null,
+        role: "org_admin", // ✅ Added: Set profile role for server-side function
+        authorized: false,
+      }
+
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: trimmedData.email,
         password: trimmedData.password,
+        options: {
+          data: userMetaData, // ✅ Added: Pass user profile data to trigger function
+        }
       })
       if (signUpError) throw new Error(signUpError.message)
 
       const user = signUpData.user
       if (!user) throw new Error("User registration failed.")
 
-      // ✅ Insert profile
-      // Assign the 'org_admin' role to the profile to ensure the 'profiles_role_fkey'
-      // constraint is satisfied by a valid key, achieving the design goal.
-      const profilePayload = {
-        id: user.id,
-        first_name: trimmedData.firstName,
-        last_name: trimmedData.lastName,
-        job_title: trimmedData.jobTitle || null,
-        authorized: false,
-        role: "org_admin", // ✅ Modified: Explicitly set the profile role to satisfy the foreign key constraint and design intent.
-      }
-
-      const { error: profileError } = await supabase.from("profiles").insert(profilePayload)
-      if (profileError) {
-        const normalizedMessage = profileError.message?.toLowerCase() ?? ""
-        const isDuplicateKeyError =
-          profileError.code === "23505" ||
-          profileError.code === "409" ||
-          normalizedMessage.includes("duplicate key")
-
-        if (!isDuplicateKeyError) {
-          throw new Error(profileError.message)
-        }
-
-        const { error: profileUpdateError } = await supabase
-          .from("profiles")
-          .update({
-            first_name: profilePayload.first_name,
-            last_name: profilePayload.last_name,
-            job_title: profilePayload.job_title,
-            role: profilePayload.role, // ✅ Modified: Ensure role is included in update path if profile pre-exists
-          })
-          .eq("id", user.id)
-
-        if (profileUpdateError) throw new Error(profileUpdateError.message)
-      }
+      // ❌ Removed client-side profile insert/update as it's now handled by the database trigger
+      // using the data passed above.
 
       // ✅ Create organization
       const { data: organizationData, error: organizationError } = await supabase
@@ -202,7 +180,7 @@ export default function SignupPage() {
       const { error: organizationUserError } = await supabase.from("organization_users").insert({
         user_id: user.id,
         organization_id: organizationId,
-        role: "admin", // The role for the organization_users table, confirming the admin status
+        role: "admin",
       })
       if (organizationUserError) throw new Error(organizationUserError.message)
 
