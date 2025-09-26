@@ -1,8 +1,6 @@
-import { NextRequest, NextResponse } from "next/server" // ✅ Modified
+import { NextRequest, NextResponse } from "next/server"
 
 import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
-
-// ❌ Removed: The conflicting RouteContext type definition
 
 const ALLOWED_FIELDS = new Set([
   "first_name",
@@ -13,12 +11,15 @@ const ALLOWED_FIELDS = new Set([
   "role",
 ])
 
-// ✅ Modified signature to use inline type for context
+type RouteContext = {
+  params: Promise<{ id: string }>
+}
+
 export async function PATCH(
-  request: NextRequest, // ✅ Modified
-  context: { params: { id: string } }
+  request: NextRequest,
+  { params }: RouteContext
 ) {
-  const userId = context.params.id
+  const { id: userId } = await params
 
   if (!userId) {
     return NextResponse.json({ error: "User id is required." }, { status: 400 })
