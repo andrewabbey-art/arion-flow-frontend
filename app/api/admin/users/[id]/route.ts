@@ -33,41 +33,55 @@ const ALLOWED_FIELDS = new Set([
   "role",
 ])
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const supabaseAdmin = getSupabaseAdminClient()
-  const supabase = createRouteHandlerClient({ cookies }) // ✅ Added
+type RouteContext = {
+  params: Promise<{ id: string }>
+}
 
-  const userId = params.id
+export async function PATCH(
+  request: NextRequest,
+  context: RouteContext
+) {
+  const { params } = context
+  const { id: userId } = await params
+
+  if (!userId) {
+    return NextResponse.json({ error: "User id is required." }, { status: 400 })
+  }
 
   try {
-    // 1. Auth check
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const cookieStore = cookies() // ✅ Added
+    // Use RLS-aware client to check session
+    const supabaseClient = createRouteHandlerClient({ cookies: () => cookieStore }) // ✅ Added
 
-    if (authError || !user) {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabaseClient.auth.getSession()
+
+    if (sessionError || !session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const supabaseAdmin = getSupabaseAdminClient()
+
+    // 1. Get invoker's role using the Admin client to bypass RLS
+    const { data: invokerProfile, error: invokerError } = await supabaseAdmin // ✅ Added
+      .from("profiles")
+      .select("role")
+      .eq("id", session.user.id)
+      .single()
+
+    if (invokerError || !invokerProfile) {
       return NextResponse.json(
-        { error: "Unauthorized. No valid session found." },
-        { status: 401 }
+        { error: "Unable to verify invoker role." },
+        { status: 403 }
       )
     }
 
-    const {
-      data: { role: currentUserRole },
-    } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single()
+    const isOrgAdmin = invokerProfile.role === "org_admin"
 
-    const isOrgAdmin = currentUserRole === "org_admin"
-
-    // 2. Parse incoming updates
-    const body = await req.json()
+    // 2. Parse and validate fields
+    const body = await request.json()
     const updateEntries = Object.entries(body).filter(([field]) =>
       ALLOWED_FIELDS.has(field)
     )
@@ -79,13 +93,12 @@ export async function PATCH(
       )
     }
 
-    const updates = Object.fromEntries(updateEntries) as ProfileUpdate // ✅ Typed to remove @typescript-eslint/no-explicit-any
+    const updates = Object.fromEntries(updateEntries) as ProfileUpdate // ✅ Typed
 
-    // 2. Security Check: Prevent role elevation to 'arion_admin' by 'org_admin'
+    // 3. Security Check: Prevent role elevation to 'arion_admin' by 'org_admin'
     if (isOrgAdmin) { // ✅ Added
       const newRole = updates.role?.trim().toLowerCase()
-      
-      // If the org_admin is trying to set the role to 'arion_admin', reject it
+
       if (newRole === "arion_admin") { // ✅ Added
         return NextResponse.json(
           { error: "You do not have permission to assign the 'arion_admin' role." },
