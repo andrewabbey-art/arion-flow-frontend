@@ -126,81 +126,38 @@ export default function SignupPage() {
         jobTitle: formData.jobTitle.trim(),
       }
 
-      // ✅ Check if organization already exists
-      const { data: existingOrg, error: orgCheckError } = await supabase
-        .from("organizations")
-        .select("id")
-        .eq("name", trimmedData.organizationName)
-        .maybeSingle()
+      const response = await fetch("/api/signup", { // ✅ Modified: Call new API route
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(trimmedData),
+      })
 
-      if (orgCheckError) throw new Error(orgCheckError.message)
-      if (existingOrg) {
+      const result = await response.json()
+
+      if (response.status === 409 && result?.error === "organization_exists") {
         setConflictingOrg(trimmedData.organizationName)
-        setShowOrgExistsModal(true) // ✅ Open modal
+        setShowOrgExistsModal(true)
         return
       }
 
-      // 🔐 Register user
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      if (response.status === 409 && result?.error === "user_exists") {
+        setErrors({ general: result?.message ?? "A user with this email already exists." })
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? result?.message ?? "Failed to complete signup.")
+      }
+      
+      // ✅ Added: Sign user in after successful server-side creation
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedData.email,
         password: trimmedData.password,
       })
-      if (signUpError) throw new Error(signUpError.message)
 
-      const user = signUpData.user
-      if (!user) throw new Error("User registration failed.")
-
-      // ✅ Insert profile
-      const profilePayload = {
-        id: user.id,
-        first_name: trimmedData.firstName,
-        last_name: trimmedData.lastName,
-        job_title: trimmedData.jobTitle || null,
-        authorized: false,
+      if (signInError) {
+        throw new Error(signInError.message)
       }
-
-      const { error: profileError } = await supabase.from("profiles").insert(profilePayload)
-      if (profileError) {
-        const normalizedMessage = profileError.message?.toLowerCase() ?? ""
-        const isDuplicateKeyError =
-          profileError.code === "23505" ||
-          profileError.code === "409" ||
-          normalizedMessage.includes("duplicate key")
-
-        if (!isDuplicateKeyError) {
-          throw new Error(profileError.message)
-        }
-
-        const { error: profileUpdateError } = await supabase
-          .from("profiles")
-          .update({
-            first_name: profilePayload.first_name,
-            last_name: profilePayload.last_name,
-            job_title: profilePayload.job_title,
-          })
-          .eq("id", user.id)
-
-        if (profileUpdateError) throw new Error(profileUpdateError.message)
-      }
-
-      // ✅ Create organization
-      const { data: organizationData, error: organizationError } = await supabase
-        .from("organizations")
-        .insert({ name: trimmedData.organizationName })
-        .select("id")
-        .single()
-      if (organizationError) throw new Error(organizationError.message)
-
-      const organizationId = organizationData?.id
-      if (!organizationId) throw new Error("Organization creation failed.")
-
-      // ✅ Link user to org
-      const { error: organizationUserError } = await supabase.from("organization_users").insert({
-        user_id: user.id,
-        organization_id: organizationId,
-        role: "admin",
-      })
-      if (organizationUserError) throw new Error(organizationUserError.message)
 
       // 🚦 Redirect to access pending
       router.push("/access-pending")
