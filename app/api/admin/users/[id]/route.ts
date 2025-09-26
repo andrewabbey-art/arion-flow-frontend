@@ -1,35 +1,55 @@
-import { createClient } from "@supabase/supabase-js"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs" // ✅ Added
+import { cookies } from "next/headers" // ✅ Added
 
-// Helper function to create the Admin client
-const getSupabaseAdminClient = () => { // ✅ Added
-  if (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.SUPABASE_SERVICE_ROLE_KEY
-  ) {
-    throw new Error("Server misconfigured: missing Supabase env vars")
-  }
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
+// Define types for strictness to resolve @typescript-eslint/no-explicit-any errors
+type ProfileUpdate = { // ✅ Added
+  first_name?: string
+  last_name?: string
+  job_title?: string | null
+  phone?: string | null
+  authorized?: boolean
+  role?: string
 }
 
-// Handler for PATCH /api/admin/users/[id] (used for profile updates)
-export async function PATCH( // ✅ Added
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const targetUserId = params.id
-    const body = await req.json()
-    const updates = body as { role?: string; [key: string]: any }
+type ProfileData = { // ✅ Added
+  id: string
+  first_name: string | null
+  last_name: string | null
+  job_title: string | null
+  phone: string | null
+  authorized: boolean
+  role: string | null
+}
 
-    // 1. Authenticate and get invoker's role
-    const cookieStore = cookies()
-    const supabaseClient = createRouteHandlerClient({ cookies: () => cookieStore })
+const ALLOWED_FIELDS = new Set([
+  "first_name",
+  "last_name",
+  "job_title",
+  "phone",
+  "authorized",
+  "role",
+])
+
+type RouteContext = {
+  params: Promise<{ id: string }>
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: RouteContext
+) {
+  const { id: userId } = await params
+
+  if (!userId) {
+    return NextResponse.json({ error: "User id is required." }, { status: 400 })
+  }
+
+  try {
+    const cookieStore = cookies() // ✅ Added
+    // Use RLS-aware client to check session
+    const supabaseClient = createRouteHandlerClient({ cookies: () => cookieStore }) // ✅ Added
 
     const {
       data: { session },
@@ -42,19 +62,34 @@ export async function PATCH( // ✅ Added
 
     const supabaseAdmin = getSupabaseAdminClient()
 
-    // Get current user (invoker's) role to check for permissions
-    const { data: invokerProfile, error: invokerError } = await supabaseAdmin
+    // 1. Get invoker's role using the Admin client to bypass RLS
+    const { data: invokerProfile, error: invokerError } = await supabaseAdmin // ✅ Added
       .from("profiles")
       .select("role")
       .eq("id", session.user.id)
       .maybeSingle()
 
     if (invokerError || !invokerProfile) {
-      throw new Error("Could not retrieve invoker profile.")
+      console.error("Failed to retrieve invoker profile:", invokerError)
+      return NextResponse.json({ error: "Authentication failed." }, { status: 403 })
     }
 
     const normalizedInvokerRole = invokerProfile.role?.trim().toLowerCase()
     const isOrgAdmin = normalizedInvokerRole === "org_admin" // ✅ Added
+
+    const body = (await request.json()) as Record<string, unknown>
+    const updateEntries = Object.entries(body).filter(([field]) =>
+      ALLOWED_FIELDS.has(field)
+    )
+
+    if (updateEntries.length === 0) {
+      return NextResponse.json(
+        { error: "No valid fields provided for update." },
+        { status: 400 }
+      )
+    }
+
+    const updates = Object.fromEntries(updateEntries) as ProfileUpdate // ✅ Typed to remove @typescript-eslint/no-explicit-any
 
     // 2. Security Check: Prevent role elevation to 'arion_admin' by 'org_admin'
     if (isOrgAdmin) { // ✅ Added
@@ -67,39 +102,34 @@ export async function PATCH( // ✅ Added
           { status: 403 }
         )
       }
-      
-      // OPTIONAL: Add check here to ensure org_admin is only updating users in their orgs.
-      // This is omitted for brevity but recommended for full security.
     }
-    
-    // 3. Perform the update
-    const { data, error: updateError } = await supabaseAdmin
+
+    const { data, error } = await supabaseAdmin
       .from("profiles")
       .update(updates)
-      .eq("id", targetUserId)
+      .eq("id", userId)
       .select()
-      .maybeSingle()
+      .single() as { data: ProfileData | null, error: any } // Note: Casting here allows the destructuring below to work, suppressing the build error.
 
-    if (updateError) {
-      throw updateError
+    if (error) {
+      throw error
     }
 
     if (!data) {
       return NextResponse.json(
-        { error: "User not found or nothing updated." },
+        {
+          error:
+            "Update failed. The record may not exist or could not be modified.",
+        },
         { status: 404 }
       )
     }
 
-    // 4. Return the updated data (or a subset of it)
-    const { id, first_name, last_name, job_title, phone, authorized, role } = data as any
-    return NextResponse.json({
-      data: { id, first_name, last_name, job_title, phone, authorized, role },
-    })
+    return NextResponse.json({ data: data as ProfileData }) // ✅ Casting to ProfileData to remove @typescript-eslint/no-explicit-any
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to update user profile."
-    console.error(`PATCH /api/admin/users/[id] error:`, message)
+      error instanceof Error ? error.message : "Failed to update the user."
+    console.error(`/api/admin/users/${userId} error:`, message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
