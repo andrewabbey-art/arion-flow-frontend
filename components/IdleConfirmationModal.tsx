@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useEffect, useState } from "react";
-import { XCircle } from "lucide-react";
+import { XCircle } from "lucide-react"; 
 
 interface IdleConfirmationModalProps {
   isOpen: boolean;
@@ -19,6 +19,7 @@ interface IdleConfirmationModalProps {
   countdownSeconds: number;
 }
 
+// ✅ Added
 export function IdleConfirmationModal({
   isOpen,
   onStay,
