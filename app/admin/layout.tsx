@@ -4,7 +4,6 @@ import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
 import { getSupabaseAdminClient } from "@/lib/supabaseAdminClient"
 
-// A robust interface that handles nullable return values from the database.
 interface UserAccess {
   authorized: boolean | null
   role: string | null
@@ -20,6 +19,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/login")
   }
 
+  console.log('🔍 Checking admin access for user:', session.user.id) // ✅ Added
+
   const supabaseAdmin = getSupabaseAdminClient()
   const { data: access, error } = await supabaseAdmin
     .from("profiles")
@@ -27,11 +28,15 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     .eq("id", session.user.id)
     .maybeSingle<UserAccess>()
 
+  console.log('📊 Profile query result:', { access, error }) // ✅ Added
+  console.log('✅ Authorized:', access?.authorized) // ✅ Added
+  console.log('👤 Role:', access?.role) // ✅ Added
+
   if (error) {
+    console.error('❌ Profile query error:', error) // ✅ Added
     throw new Error(`Failed to load admin access: ${error.message}`)
   }
 
-  // Explicit normalization and checks for role and authorization status.
   const normalizedRole =
     typeof access?.role === "string" ? access.role.trim().toLowerCase() : null
 
@@ -41,10 +46,13 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const isAuthorized = Boolean(access?.authorized)
 
-  // Redirect if any core permission or authorization check fails
+  console.log('🔐 Auth check:', { isAuthorized, isAllowedRole, normalizedRole }) // ✅ Added
+
   if (!isAuthorized || !isAllowedRole) {
+    console.log('🚫 Access denied - redirecting to /access-pending') // ✅ Added
     redirect("/access-pending")
   }
 
+  console.log('✅ Access granted') // ✅ Added
   return <>{children}</>
 }
