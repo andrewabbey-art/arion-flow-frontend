@@ -81,14 +81,14 @@ export function IdleConfirmationModal({
           <p className="text-3xl font-bold text-primary mt-2">
             {currentCountdown} seconds
           </p>
-          Click 'Stay Logged In' to reset the 5-minute timer.
+          Click &apos;Stay Logged In&apos; to reset the 5-minute timer. {/* ✅ Corrected apostrophe */}
         </DialogDescription>
         <DialogFooter>
           <Button variant="outline" onClick={handleLogout}>
             Log Out Now
           </Button>
           <Button onClick={handleStay}>
-            Stay Logged In
+            Stay Logged In {/* ✅ Corrected apostrophe */}
           </Button>
         </DialogFooter>
       </DialogContent>
