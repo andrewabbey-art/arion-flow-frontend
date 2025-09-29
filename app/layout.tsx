@@ -2,6 +2,7 @@ import "./globals.css";
 import { Inter, Poppins } from "next/font/google";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
+import IdleTimer from "@/components/IdleTimer"; // ✅ Added
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -27,6 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${poppins.variable}`}>
+        <IdleTimer /> {/* ✅ Added */}
         <Navbar />
         <main className="min-h-screen">{children}</main>
         <Footer />
