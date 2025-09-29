@@ -1,7 +1,7 @@
 // lib/useFixedTimeout.ts
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { supabase } from "./supabaseClient"
+import { getSupabaseClient } from "./supabaseClient"
 
 const MILLISECONDS_PER_SECOND = 1000
 const MILLISECONDS_PER_MINUTE = 60 * MILLISECONDS_PER_SECOND
@@ -14,6 +14,8 @@ export function useFixedTimeout() {
 
   const mainTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const countdownInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const supabase = getSupabaseClient()
 
   // Clears both timers
   const clearTimers = useCallback(() => {
@@ -41,65 +43,54 @@ export function useFixedTimeout() {
     setCountdown(COUNTDOWN_SECONDS)
 
     countdownInterval.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownInterval.current!)
-          return 0
-        }
-        return prev - 1
-      })
+      setCountdown((prev) => prev - 1)
     }, MILLISECONDS_PER_SECOND)
   }, [])
 
-  // Function to reset the main 5-minute timer (called on initialization or 'Stay' click)
+  // Reset main timer
   const resetMainTimer = useCallback(() => {
-    // 1. Clear both timers/intervals
     clearTimers()
-
-    // 2. Hide the modal and reset countdown state
-    setIsModalOpen(false)
-    setCountdown(COUNTDOWN_SECONDS)
-
-    // 3. Start the main 5-minute timer
     mainTimer.current = setTimeout(() => {
       startCountdown()
     }, IDLE_TIMEOUT_MINUTES * MILLISECONDS_PER_MINUTE)
-  }, [startCountdown, clearTimers])
+  }, [clearTimers, startCountdown])
 
-  // --- useEffect Hook for Initialization and Cleanup ---
+  // Setup initial timers and auth state listeners
   useEffect(() => {
-    const initTimeout = async () => {
-      // Check if a user is logged in
-      const { data: { session } } = await supabase.auth.getSession()
-
-      // 🛑 Only start the fixed timer if a user is logged in
-      if (session) {
+    function initTimeout() {
+      if (!mainTimer.current) {
         resetMainTimer()
       }
     }
 
     initTimeout()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        if (session) {
-          resetMainTimer()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED" ||
+          event === "USER_UPDATED"
+        ) {
+          if (session) {
+            resetMainTimer()
+          }
+        }
+
+        if (event === "SIGNED_OUT") {
+          clearTimers()
+          setIsModalOpen(false)
+          setCountdown(COUNTDOWN_SECONDS)
         }
       }
-
-      if (event === "SIGNED_OUT") {
-        clearTimers()
-        setIsModalOpen(false)
-        setCountdown(COUNTDOWN_SECONDS)
-      }
-    })
+    )
 
     // 🧹 Cleanup logic: This runs on component unmount
     return () => {
       clearTimers()
       subscription.unsubscribe()
     }
-  }, [supabase, resetMainTimer, clearTimers])
+  }, [resetMainTimer, clearTimers])
 
   // Watch for countdown reaching zero and trigger final logout
   useEffect(() => {
