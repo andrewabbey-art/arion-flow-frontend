@@ -8,7 +8,7 @@ import { getSupabaseClient } from "./supabaseClient" // Imports the client from 
 const IDLE_TIMEOUT_MINUTES = 5 // Time before the warning modal appears (5 minutes)
 const COUNTDOWN_SECONDS = 20 // Time the user has to react in the modal (20 seconds)
 const MILLISECONDS_PER_MINUTE = 60 * 1000
-const MILLISECONDS_PER_SECOND = 1000
+const MILLISECONDS_PER_SECOND = 1000 // Correct constant name defined here
 
 // ✅ Added
 export function useFixedTimeout() {
@@ -62,7 +62,7 @@ export function useFixedTimeout() {
             }
             return prev - 1
         })
-    }, MILLISECONDS_PER SECOND)
+    }, MILLISECONDS_PER_SECOND) // ✅ Corrected syntax here
 
   }, [])
 
