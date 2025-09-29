@@ -2,75 +2,88 @@
 
 import { useEffect, useCallback, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { getSupabaseClient } from "./supabaseClient" // Imports the client from the utility file
+import { getSupabaseClient } from "./supabaseClient" 
 
 // ⏰ CONSTANTS
-const IDLE_TIMEOUT_MINUTES = 5 // Time before the warning modal appears (5 minutes)
-const COUNTDOWN_SECONDS = 20 // Time the user has to react in the modal (20 seconds)
+const IDLE_TIMEOUT_MINUTES = 0.1666 // 10 seconds for testing (10 / 60) // ✅ Modified for testing (10 seconds)
+const COUNTDOWN_SECONDS = 5 // 5 seconds for testing // ✅ Modified for testing
 const MILLISECONDS_PER_MINUTE = 60 * 1000
-const MILLISECONDS_PER_SECOND = 1000 // Correct constant name defined here
+const MILLISECONDS_PER_SECOND = 1000
 
 // ✅ Added
 export function useFixedTimeout() {
-  const router = useRouter()
+  const router = useRouter() 
   const supabase = getSupabaseClient()
-  const mainTimer = useRef<NodeJS.Timeout | null>(null) // Main 5-minute timer
-  const countdownInterval = useRef<NodeJS.Timeout | null>(null) // Countdown interval
+  const mainTimer = useRef<NodeJS.Timeout | null>(null) 
+  const countdownInterval = useRef<NodeJS.Timeout | null>(null) 
   
-  // State for the modal
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS)
   
-  // --- Core Logic Functions ---
+  // Utility to clear all timers
+  const clearTimers = useCallback(() => {
+    if (mainTimer.current) {
+        clearTimeout(mainTimer.current)
+        mainTimer.current = null;
+    }
+    if (countdownInterval.current) {
+        clearInterval(countdownInterval.current)
+        countdownInterval.current = null;
+    }
+  }, []) // No dependencies needed for clearing refs
 
   // Action to perform on timeout: clear session and redirect
   const logoutUser = useCallback(async () => {
-    // Clear all timers
-    if (mainTimer.current) clearTimeout(mainTimer.current)
-    if (countdownInterval.current) clearInterval(countdownInterval.current)
+    clearTimers() // Use utility to clear timers
     
     setIsModalOpen(false) 
     
-    // Get session before logging out, for security check
+    // Check session before logging out (good practice)
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return // User is already logged out, do nothing
+    if (!session) return 
 
     console.log("Session expiration reached. Logging out.")
+    
+    // Perform Supabase logout
     await supabase.auth.signOut()
 
-    // ➡️ Redirect the user to the auth page
+    // ➡️ Redirect the user to the auth page and refresh the application state
     router.push("/auth")
     router.refresh()
-  }, [supabase, router])
+  }, [supabase, router, clearTimers]) 
 
   // Function to start the final countdown timer
   const startCountdown = useCallback(() => {
+    // 1. Ensure any existing main timer is stopped
+    if (mainTimer.current) clearTimeout(mainTimer.current);
+
     setIsModalOpen(true)
     setCountdown(COUNTDOWN_SECONDS)
 
-    // Clear any previous countdown interval
+    // 2. Clear any previous countdown interval before starting a new one
     if (countdownInterval.current) {
         clearInterval(countdownInterval.current)
     }
 
-    // Set the interval to decrement the countdown every second
+    // 3. Set the interval to decrement the countdown every second
     countdownInterval.current = setInterval(() => {
         setCountdown(prev => {
             if (prev <= 1) {
-                // When countdown hits 1, the next tick should trigger auto-logout
+                // If countdown reaches 1, the next tick should trigger auto-logout via the useEffect below
+                clearInterval(countdownInterval.current!) 
+                countdownInterval.current = null;
                 return 0
             }
             return prev - 1
         })
-    }, MILLISECONDS_PER_SECOND) // ✅ Corrected syntax here
+    }, MILLISECONDS_PER_SECOND)
 
-  }, [])
+  }, [MILLISECONDS_PER_SECOND])
 
   // Function to reset the main 5-minute timer (called on initialization or 'Stay' click)
   const resetMainTimer = useCallback(() => { 
     // 1. Clear both timers/intervals
-    if (mainTimer.current) clearTimeout(mainTimer.current)
-    if (countdownInterval.current) clearInterval(countdownInterval.current) 
+    clearTimers()
 
     // 2. Hide the modal and reset countdown state
     setIsModalOpen(false) 
@@ -79,8 +92,8 @@ export function useFixedTimeout() {
     // 3. Start the main 5-minute timer
     mainTimer.current = setTimeout(() => {
         startCountdown() 
-    }, IDLE_TIMEOUT_MINUTES * MILLISECONDS_PER_MINUTE)
-  }, [startCountdown]) 
+    }, IDLE_TIMEOUT_MINUTES * MILLISECONDS_PER_MINUTE) // Will run in 10 seconds
+  }, [startCountdown, clearTimers]) 
 
   // --- useEffect Hook for Initialization and Cleanup ---
   
@@ -97,16 +110,11 @@ export function useFixedTimeout() {
 
     initTimeout()
 
-    // 🧹 Cleanup logic
+    // 🧹 Cleanup logic: This runs on component unmount
     return () => {
-        if (mainTimer.current) {
-            clearTimeout(mainTimer.current)
-        }
-        if (countdownInterval.current) {
-            clearInterval(countdownInterval.current) 
-        }
+        clearTimers()
     }
-  }, [supabase, resetMainTimer])
+  }, [supabase, resetMainTimer, clearTimers]) 
 
   // Watch for countdown reaching zero and trigger final logout
   useEffect(() => {
@@ -123,4 +131,3 @@ export function useFixedTimeout() {
     logoutUser 
   } 
 }
-// ✅ Added
