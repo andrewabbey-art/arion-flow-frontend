@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
         computeType: "GPU",
         gpuCount: 1,
         gpuTypeIds: [finalGpuTypeId],
-        imageName: "ghcr.io/andrewabbey-art/arion_flow:0.3",
+        imageName: "ghcr.io/andrewabbey-art/arion_flow:0.4",
         name,
         ports: ["8080/http", "22/tcp"],
         containerDiskInGb: 20,
